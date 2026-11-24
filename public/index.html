@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="用 3D 动画演示多 PSP 订阅系统设计，覆盖正常支付、Webhook 幂等、超时恢复、Outbox 与对账。">
+<title>Multi-PSP · 订阅支付系统设计</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+<header>
+<p class="eyebrow">SYSTEM DESIGN · INTERVIEW DEMO</p>
+<h1>多渠道订阅支付</h1>
+<p class="intro">以 OpenArt Pro 首购为例，看 Stripe、PayPal 与订阅权益如何解耦，异常如何恢复。</p>
+</header>
+<div class="scenarios" id="scenarios" role="group" aria-label="演示场景"></div>
+<section class="lab" aria-labelledby="scenarioTitle">
+<div class="labHead">
+<div><h2 id="scenarioTitle"></h2><p id="scenarioSummary"></p></div>
+<span id="progress"></span>
+</div>
+<ul class="paths" aria-label="路径图例"><li><i></i>同步 Checkout</li><li><i></i>异步 PSP Webhook 与权益</li><li><i></i>对账与补偿</li></ul>
+<figure class="scene" id="scene" aria-label="多渠道订阅支付系统路径图">
+<div id="labels" class="labels" aria-hidden="true"></div>
+<div class="flight" id="flight" aria-hidden="true" hidden><i></i><span></span></div>
+</figure>
+<div class="event"><code id="action"></code><span id="result"></span></div>
+<div class="status" id="status" aria-label="本地业务状态和持久化计数"></div>
+</section>
+<div class="playback">
+<div class="controls"><button class="primary" id="play">播放演示</button><button id="previous">上一步</button><button id="next">下一步</button><button id="reset">重置</button></div>
+<p id="caption" aria-live="polite"></p>
+</div>
+<section class="principles">
+<article><h2>Adapter</h2><p>统一 Checkout、状态查询和事件语义。各渠道的能力、标识和幂等范围留在 Adapter 内。</p></article>
+<article><h2>Router</h2><p>按国家、币种、支付方式、能力和健康度做初始选择。已经发出的尝试保留渠道归属。</p></article>
+<article><h2>State Machine</h2><p>一次扣款、周期账单、长期订阅和产品权益各自迁移。续费失败可以进入宽限期。</p></article>
+<article><h2>Idempotency + Reconciliation</h2><p>用持久化唯一约束阻止重复效果，定期查渠道状态和权益账本补齐遗漏。</p></article>
+</section>
+<details class="interview">
+<summary>面试时怎么讲 · 约 2 分钟</summary>
+<div class="talk">
+<p>如果设计一套多渠道订阅支付，我会先定义统一 Payment API 和 PaymentProvider 接口。用户提交套餐后，服务端校验身份和价格，创建本地订阅意图。Router 按国家、币种、支付方式和渠道能力选择 PSP，再由对应 Adapter 创建托管 Checkout 并保存映射。</p>
+<p>创建 Checkout 的同步请求返回跳转地址。Webhook 走独立入口，验签后写入 Inbox，Worker 将不同渠道的消息转成统一事件。确认实际收款后，Billing 更新 Payment、Invoice 和 Subscription，权益服务按发票与类型幂等发放 Credits。</p>
+<p>异常里我重点看三件事。第一，同一业务请求靠业务幂等键、数据库唯一约束和渠道幂等防重复创建。第二，渠道超时代表结果未知，应固定原渠道，用原 key 重试或查询，确认旧操作终态后再决定是否换渠道。第三，Webhook 可能重复、丢失或乱序，所以我要有 Inbox、合法状态迁移和对账。</p>
+<p>如果支付状态已经提交但权益任务没发出去，我把状态更新和 Outbox 放在同一个数据库事务，由 Relay 重试投递。消息可能重复，消费端继续凭账本唯一约束保证一次业务效果。最后对账比较 PSP、发票和已发权益，补齐长期卡住的任务。</p>
+</div>
+</details>
+<details class="interview">
+<summary>代码面试切入点 · Adapter 与 Webhook 幂等</summary>
+<div class="talk"><p>定义 <code>PaymentProvider.createCheckout(command, key)</code>、<code>retrieve(ref)</code> 和事件转换接口。用两个假的 Adapter 验证同一用例能够切换渠道，并测试超时映射为 <code>UNKNOWN</code>。</p><p>给 Webhook Inbox 加渠道事件唯一键，给权益账本加业务唯一键。测试同事件重复、不同事件指向同一发票、提交后重投，以及同一业务 key 更改参数时应拒绝。</p></div>
+</details>
+<footer>
+<p>面试设计示意。使用模拟事件和标识。</p>
+<div><a href="https://docs.stripe.com/checkout/fulfillment">Stripe Checkout</a><a href="https://docs.stripe.com/webhooks">Stripe Webhook</a><a href="https://developer.paypal.com/api/rest/reference/idempotency/">PayPal 幂等</a></div>
+</footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
