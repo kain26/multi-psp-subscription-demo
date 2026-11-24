@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { base, scenarios } from './scenarios.js';
 import { buildModel } from './models.js';
+import { codeExamples } from './code-examples.js';
 
 const $ = id => document.getElementById(id);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
@@ -304,10 +305,42 @@ function goTo(index) {
   previous = undefined;
   render();
 }
+function renderCode() {
+  const { title, point, source } = codeExamples[scenario.id];
+  $('codeScenario').textContent = scenario.name;
+  $('codeTitle').textContent = title;
+  $('codePoint').textContent = point;
+  const fragment = document.createDocumentFragment();
+  const tokens = /(?<comment>\/\/[^\n]*)|(?<string>"[^"\n]*")|(?<keyword>\b(?:async|await|function|const|return|if|throw|new|interface|type|try|catch)\b)|(?<number>\b\d+\b)/g;
+  let offset = 0;
+  for (const match of source.matchAll(tokens)) {
+    const category = Object.keys(match.groups).find(key => match.groups[key] !== undefined);
+    fragment.append(source.slice(offset, match.index), element('span', 'ts-' + category, match[0]));
+    offset = match.index + match[0].length;
+  }
+  fragment.append(source.slice(offset));
+  $('scenarioCode').replaceChildren(fragment);
+  $('codeScroll').scrollTo(0, 0);
+  $('copyCode').textContent = '复制代码';
+}
+const clipboard = navigator.clipboard;
+if (clipboard?.writeText) {
+  $('copyCode').hidden = false;
+  $('copyCode').onclick = async () => {
+    const selected = scenario;
+    try {
+      await clipboard.writeText(codeExamples[selected.id].source);
+      if (scenario === selected) $('copyCode').textContent = '已复制';
+    } catch {
+      if (scenario === selected) $('copyCode').textContent = '复制失败，请手动选取';
+    }
+  };
+}
 function select(index) {
   scenario = scenarios[index];
   Array.from($('scenarios').children).forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
   $('scenarioTitle').textContent = scenario.title;
+  renderCode();
   goTo(0);
 }
 function requestFrame() {
@@ -364,7 +397,7 @@ $('next').onclick = stepForward;
 $('reset').onclick = () => goTo(0);
 document.addEventListener('keydown', event => {
   if (event.altKey || event.ctrlKey || event.metaKey ||
-      event.target.closest?.('input, select, textarea, [contenteditable]')) return;
+      event.target.closest?.('input, select, textarea, pre, [contenteditable]')) return;
   if (event.key === 'ArrowRight' && step < scenario.steps.length) stepForward();
   else if (event.key === 'ArrowLeft' && step) goTo(step - 1);
   else if (event.key === ' ' && !event.target.closest?.('button, a, summary')) togglePlay();
