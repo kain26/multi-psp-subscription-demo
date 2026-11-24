@@ -1,9 +1,11 @@
 # Multi-PSP Subscription Integration
 
-面向面试的独立 Three.js 动画。九个场景演示 Stripe 首购、PayPal 初始选路、重复点击、PSP 超时、Webhook 重投、丢失与乱序、Outbox、权益补偿和续费失败。图中的订单、渠道回执和计数均为模拟数据，页面不调用支付 API。
+面向系统设计面试的订阅支付动画。五个模块通过 SVG 泳道展示同步 Checkout、异步 Webhook 与权益、对账补偿。九个场景使用模拟数据。
 
-```sh
-python3 -m http.server 4192 --directory public
-```
+直接打开 `public/index.html` 即可离线演示。HTML 内的 `scenarios` 数组定义各场景、步骤、路径和状态变化。Cloudflare Pages 的静态部署目录为 `public/`。
 
-打开 <http://127.0.0.1:4192/>。静态部署目录是 `public/`。
+- **← / →** 上一步或下一步
+- **空格** 播放或暂停
+- **1–9** 切换场景
+- **R** 重置当前场景
+- **P / Esc** 切换演讲模式或退出
