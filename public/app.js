@@ -9,24 +9,25 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 const compact = matchMedia('(max-width: 1140px)');
 const stage = $('scene');
 const actors = [
-  ['client', '用户 / 前端', 'blue'],
-  ['api', 'Payment API', 'blue'],
-  ['router', 'Router', 'blue'],
-  ['resilience', 'Resilience', 'amber'],
-  ['adapter', 'Adapter', 'blue'],
-  ['psp', 'PSP', 'blue'],
-  ['webhook', 'Webhook', 'green'],
-  ['queue', 'Queue / Worker', 'green'],
-  ['billing', 'Billing / 权益', 'green'],
-  ['store', 'Database', 'amber'],
-  ['reconcile', 'Reconciliation', 'amber'],
+  ['client', '用户 / 前端'],
+  ['api', 'Payment API'],
+  ['router', 'Router'],
+  ['resilience', 'Resilience'],
+  ['adapter', 'Adapter'],
+  ['psp', 'PSP'],
+  ['webhook', 'Webhook'],
+  ['queue', 'Queue / Worker'],
+  ['billing', 'Billing / 权益'],
+  ['store', 'Database'],
+  ['reconcile', 'Reconciliation'],
 ];
 const actorNames = Object.fromEntries(actors.map(([id, name]) => [id, name]));
 const providers = { stripe: 'Stripe', paypal: 'PayPal', other: 'Other PSP' };
 const actorKey = id => Object.hasOwn(providers, id) ? 'psp' : id;
 const actorName = id => providers[id] ?? actorNames[id];
 const providerFor = event => providers[event.to] ?? providers[event.from];
-const colors = { blue: 0x8aa7f8, green: 0x68dbbb, amber: 0xf5bb77 };
+const ink = new THREE.Color(0x2148b8);
+const neutralModel = new THREE.Color(0x858689);
 const iconPaths = {
   client: 'M8 21h8a4 4 0 0 0 4-4v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1a4 4 0 0 0 4 4Z M15 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0Z',
   api: 'M3 4h18v13H3z M9 21h6 M12 17v4 M9 8l-2 2.5 2 2.5 M12 13h4',
@@ -56,15 +57,15 @@ if (renderer) {
   renderer.toneMappingExposure = 1.35;
   renderer.domElement.setAttribute('aria-hidden', 'true');
   stage.append(renderer.domElement);
-  scene.add(new THREE.HemisphereLight(0xe7f2ff, 0x657baf, 2.1));
-  const key = new THREE.DirectionalLight(0xffffff, 3);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8c8c8c, 1.8));
+  const key = new THREE.DirectionalLight(0xffffff, 2.65);
   key.position.set(-4, 7, 8);
   scene.add(key);
-  const edge = new THREE.DirectionalLight(0x89a6ff, 1.6);
+  const edge = new THREE.DirectionalLight(0xffffff, .9);
   edge.position.set(4, 1, -4);
   scene.add(edge);
-  for (const [id, , tone] of actors) {
-    const entry = buildModel(id, colors[tone]);
+  for (const [id] of actors) {
+    const entry = buildModel(id, neutralModel);
     models.set(id, entry);
     scene.add(entry.model);
   }
@@ -105,10 +106,10 @@ for (const [id, name] of counters) {
   counterViews.set(id, value);
 }
 function stateTone(value) {
-  if (/^(SUCCEEDED|PAID|ACTIVE|GRANTED|COMPLETED)$/.test(value)) return 'green';
-  if (/^(FAILED|PAST_DUE)$/.test(value)) return 'pink';
-  if (/^(UNKNOWN|RETRY_PENDING|GRACE_PERIOD)$/.test(value)) return 'amber';
-  return 'blue';
+  if (/^(SUCCEEDED|PAID|ACTIVE|GRANTED|COMPLETED)$/.test(value)) return 'success';
+  if (/^(FAILED|PAST_DUE)$/.test(value)) return 'failure';
+  if (/^(UNKNOWN|RETRY_PENDING|GRACE_PERIOD)$/.test(value)) return 'attention';
+  return 'neutral';
 }
 function stateNode(value, className) {
   const node = element('span', 'state-node ' + className, value);
@@ -122,11 +123,10 @@ let elapsed = 0, previous, frameId = 0;
 let activeDots = [], visibleActors = [];
 const flightMs = 950, dwellMs = 2150;
 const currentEvent = () => scenario.steps[step - 1];
-function eventTone(event) {
-  if (/Timeout|未送达/.test(event.op) || event.kind === 'blocked') return 'pink';
-  if ([event.from, event.to].includes('reconcile')) return 'amber';
-  if ([event.from, event.to].some(id => ['webhook', 'queue', 'billing'].includes(id))) return 'green';
-  return 'blue';
+function eventChannel(event) {
+  if ([event.from, event.to].includes('reconcile')) return 'reconcile';
+  if ([event.from, event.to].some(id => ['webhook', 'queue', 'billing'].includes(id))) return 'async';
+  return 'checkout';
 }
 function drawIcons(ratio = 0) {
   if (!renderer) return;
@@ -136,7 +136,9 @@ function drawIcons(ratio = 0) {
   const pulse = pending && !reduce.matches ? Math.sin(ratio * Math.PI) : 0;
   for (const [id, entry] of models) {
     const selected = id === source || id === target;
-    entry.primary.emissiveIntensity = selected ? .27 + pulse * .09 : .08;
+    entry.primary.color.copy(selected ? ink : neutralModel);
+    entry.primary.emissive.copy(selected ? ink : neutralModel);
+    entry.primary.emissiveIntensity = selected ? .14 + pulse * .09 : .025;
     entry.sculpture.position.y = selected ? pulse * .09 : 0;
   }
   renderer.render(scene, camera);
@@ -185,6 +187,7 @@ function renderActors() {
     $('actors').append(label);
     if (!renderer) {
       const icon = element('span', 'flat-icon');
+      icon.dataset.active = label.dataset.active;
       icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="' + iconPaths[id] + '"/></svg>';
       fallback.append(icon);
     }
@@ -202,7 +205,7 @@ function renderTimeline() {
     const row = element('div', 'sequence-row');
     row.dataset.active = String(active);
     row.dataset.preview = String(index >= step);
-    row.dataset.tone = eventTone(event);
+    row.dataset.channel = eventChannel(event);
     const a = compact.matches ? .18 : (visibleActors.indexOf(actorKey(event.from)) + .5) / visibleActors.length;
     const b = compact.matches ? .82 : (visibleActors.indexOf(actorKey(event.to)) + .5) / visibleActors.length;
     const lost = /Timeout|未送达/.test(event.op) || event.kind === 'blocked';
@@ -397,10 +400,9 @@ function frame(timestamp) {
   requestFrame();
 }
 
-scenarios.forEach(({ name, resilience }, index) => {
+scenarios.forEach(({ name }, index) => {
   const button = element('button', '', name);
   button.type = 'button';
-  if (resilience) button.classList.add('resilience-choice');
   button.onclick = () => select(index);
   $('scenarios').append(button);
 });

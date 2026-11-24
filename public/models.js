@@ -9,10 +9,10 @@ export function buildModel(id, color) {
   const model = new THREE.Group();
   const sculpture = new THREE.Group();
   const primary = new THREE.MeshStandardMaterial({
-    color, emissive: color, emissiveIntensity: .11, metalness: .31, roughness: .31,
+    color, emissive: color, emissiveIntensity: .11, metalness: .08, roughness: .59,
   });
-  const light = new THREE.MeshStandardMaterial({ color: 0xeef4ff, metalness: .2, roughness: .32 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x17243c, metalness: .3, roughness: .42 });
+  const light = new THREE.MeshStandardMaterial({ color: 0xe9e9e5, metalness: .06, roughness: .54 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x38393a, metalness: .05, roughness: .59 });
 
   function part(geometry, position, scale, material = primary) {
     const mesh = new THREE.Mesh(geometry, material);
@@ -115,7 +115,7 @@ export function buildModel(id, color) {
   shapes[id]();
 
   const base = new THREE.Mesh(cylinder, new THREE.MeshStandardMaterial({
-    color: 0x202d43, metalness: .25, roughness: .56,
+    color: 0x656669, metalness: .04, roughness: .67,
   }));
   base.position.set(0, -.74, -.06);
   base.scale.set(.63, .09, .54);
