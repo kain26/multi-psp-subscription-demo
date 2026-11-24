@@ -1,3 +1,5 @@
+import { resilienceScenarios } from './resilience.js';
+
 const action = (from,to,op,result,note,patch={},kind='flow')=>({from,to,op,result,note,patch,kind});
 export const base={checkout:'—',payment:'—',invoice:'—',subscription:'—',entitlement:'—',provider:null,intents:0,sessions:0,credits:0,inbox:0,pending:0};
 const create=action('client','api','POST /subscriptions/checkout','收到购买请求','服务端从可信套餐目录查价格，校验用户、国家、币种和支付方式。此时还未向外部渠道发请求。');
@@ -39,12 +41,12 @@ export const scenarios=[
     action('adapter','stripe','相同 PSP key 重试原请求','返回既有 cs_demo_01','同一渠道、同一端点、同一参数和受支持的幂等有效期内，重试复用原操作。PayPal 端点是否支持 PayPal-Request-Id 要按 API 确认。',{},'ok'),
     action('api','client','返回已有 Checkout URL','1 个意图 · 1 个 Session','同一个购买动作拿回同一个结果，未新建第二条订阅。',{},'ok'),
   ]},
-  {id:'timeout',name:'PSP 超时',title:'响应丢了，结果仍然未知',summary:'先固定旧渠道并恢复原请求。UNKNOWN 不代表失败。',initial:{intents:1,checkout:'CREATING',subscription:'PENDING'},steps:[
+  {id:'timeout',name:'PSP 超时',title:'响应丢了，结果仍然未知',resilience:true,summary:'先固定旧渠道并恢复原请求。UNKNOWN 不代表失败。',initial:{intents:1,checkout:'CREATING',payment:'PENDING',subscription:'PENDING'},steps:[
     route,useStripe,stripe,
-    action('stripe','adapter','响应丢失 → Timeout','本地标记 UNKNOWN','图中我们知道 Stripe 已创建，但调用方只看到超时。Session 阶段与实际扣款阶段都可能有不确定结果。',{checkout:'UNKNOWN'},'warn'),
-    action('router','paypal','尝试切换 PSP','拦截 · 旧请求仍可能成功','在 UNKNOWN 时禁止另一渠道再创建同一购买或扣款。跨 PSP 的幂等键不会互相去重。',{},'blocked'),
+    action('stripe','adapter','响应丢失 → Timeout','本地标记 UNKNOWN','图中我们知道 Stripe 已创建，但调用方只看到超时。Session 阶段与实际扣款阶段都可能有不确定结果。',{checkout:'UNKNOWN',payment:'UNKNOWN'},'warn'),
+    action('resilience','paypal','尝试切换 PSP','拦截 · 旧请求仍可能成功','在 UNKNOWN 时禁止另一渠道再创建同一购买或扣款。跨 PSP 的幂等键不会互相去重。即使 Stripe 热点故障促使熔断 OPEN，本笔仍是 UNKNOWN。',{stripeBreaker:'OPEN'},'blocked'),
     action('adapter','stripe','原 key 重试／查询已知标识','找回 cs_demo_01','在渠道幂等有效期内重试原操作。已知 Session ID 时直接查询，否则用可验证的关联或对账。超过期且仍未知时进入待处理队列。',{},'ok'),
-    action('adapter','store','绑定旧 Session','恢复 OPEN · 仍只存在一个 Session','确认旧 Session 仍可用就复用。允许切换前，须按阶段确认旧操作不会继续扣款，或按业务完成关闭和过账处理。',{checkout:'OPEN'},'ok'),
+    action('adapter','store','绑定旧 Session','恢复 OPEN · 仍只存在一个 Session','确认旧 Session 仍可用就复用。允许切换前，须按阶段确认旧操作不会继续扣款，或按业务完成关闭和过账处理。',{checkout:'OPEN',payment:'PENDING'},'ok'),
   ]},
   {id:'duplicates',name:'Webhook 重复',title:'不同 Event ID 也不能重复发 Credits',summary:'先以渠道事件去重，再以付款对应的权益计费周期去重。',initial:{...paidSeed,entitlement:'GRANTED',credits:1,pending:0},steps:[
     action('stripe','webhook','重投 evt_01 · 第 2 次','验签通过 · 同事件重投','用户的发票 in_01 已付，账本已有一笔权益。渠道交付可能重试。'),
@@ -86,4 +88,5 @@ export const scenarios=[
     action('billing','store','transition(subscription)','Subscription → PAST_DUE','按业务规则进入欠费状态。这个示例有宽限期，所以订阅未取消。',{subscription:'PAST_DUE',entitlement:'GRACE_PERIOD'},'warn'),
     action('billing','client','显示宽限期与更新支付方式','已有权益按策略保留 · 未发下期 Credits','是否立即停权由业务策略决定。续费重试、退款或取消需要各自的状态与补偿规则。',{},'ok'),
   ]},
+  ...resilienceScenarios(action),
 ];

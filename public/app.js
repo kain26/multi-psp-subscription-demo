@@ -2,15 +2,17 @@ import * as THREE from './vendor/three.module.min.js';
 import { base, scenarios } from './scenarios.js';
 import { buildModel } from './models.js';
 import { codeExamples } from './code-examples.js';
+import { channelDefaults } from './resilience.js';
 
 const $ = id => document.getElementById(id);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)');
-const compact = matchMedia('(max-width: 1050px)');
+const compact = matchMedia('(max-width: 1140px)');
 const stage = $('scene');
 const actors = [
   ['client', '用户 / 前端', 'blue'],
   ['api', 'Payment API', 'blue'],
   ['router', 'Router', 'blue'],
+  ['resilience', 'Resilience', 'amber'],
   ['adapter', 'Adapter', 'blue'],
   ['psp', 'PSP', 'blue'],
   ['webhook', 'Webhook', 'green'],
@@ -29,6 +31,7 @@ const iconPaths = {
   client: 'M8 21h8a4 4 0 0 0 4-4v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1a4 4 0 0 0 4 4Z M15 6a3 3 0 1 0-6 0 3 3 0 1 0 6 0Z',
   api: 'M3 4h18v13H3z M9 21h6 M12 17v4 M9 8l-2 2.5 2 2.5 M12 13h4',
   router: 'M7 12h5m0 0 5-6m-5 6 5 6 M7 12a2 2 0 1 0-4 0 2 2 0 1 0 4 0 M21 5a2 2 0 1 0-4 0 2 2 0 1 0 4 0 M21 19a2 2 0 1 0-4 0 2 2 0 1 0 4 0',
+  resilience: 'M12 2 20 6v5c0 5-3 8-8 11-5-3-8-6-8-11V6z M12 7l-3 6h3l-1 5 4-7h-3z',
   adapter: 'M10 8l2-2a4 4 0 0 1 6 6l-2 2 M8 10l-2 2a4 4 0 0 0 6 6l2-2 M9 15l6-6',
   psp: 'M3 5h18v14H3z M3 10h18 M6 15h4',
   webhook: 'M4 10a3 3 0 1 1 6 0v5a3 3 0 0 0 6 0v-2 M20 9a2 2 0 1 0-4 0 2 2 0 1 0 4 0',
@@ -113,7 +116,7 @@ function stateNode(value, className) {
   return node;
 }
 
-let scenario = scenarios[0], step = 0, state = { ...base }, before = state;
+let scenario = scenarios[0], step = 0, state = { ...base, ...channelDefaults }, before = state;
 let pending = false, playing = false, paused = false;
 let elapsed = 0, previous, frameId = 0;
 let activeDots = [], visibleActors = [];
@@ -166,7 +169,7 @@ function renderActors() {
   const diagram = stage.parentElement;
   diagram.style.setProperty('--columns', visibleActors.length);
   const groups = compact.matches ? [['本步参与者', visibleActors.length]] :
-    [['应用', 4], ['支付渠道', 1], ['异步处理', 3], ['存储与补偿', 2]];
+    [['应用', 3], ['支付渠道容错层', 1], ['支付渠道', 2], ['异步处理', 3], ['存储与补偿', 2]];
   $('actorGroups').replaceChildren(...groups.map(([name, span]) => {
     const group = element('span', '', name);
     group.style.gridColumn = 'span ' + span;
@@ -190,22 +193,20 @@ function renderActors() {
 }
 function renderTimeline() {
   const timeline = $('timeline');
-  const start = step ? Math.max(0, step - (compact.matches ? 1 : 4)) : 0;
-  const end = step || (compact.matches ? 1 : 3);
   const headingProvider = providerFor(currentEvent() ?? scenario.steps[0]) ?? state.provider;
   timeline.replaceChildren();
   activeDots = [];
-  for (let index = start; index < end; index++) {
-    const event = scenario.steps[index];
+  $('jumpToStep').disabled = step === 0;
+  for (const [index, event] of scenario.steps.entries()) {
     const active = step > 0 && index === step - 1;
     const row = element('div', 'sequence-row');
     row.dataset.active = String(active);
-    row.dataset.preview = String(step === 0);
+    row.dataset.preview = String(index >= step);
     row.dataset.tone = eventTone(event);
-    const a = (visibleActors.indexOf(actorKey(event.from)) + .5) / visibleActors.length;
-    const b = (visibleActors.indexOf(actorKey(event.to)) + .5) / visibleActors.length;
+    const a = compact.matches ? .18 : (visibleActors.indexOf(actorKey(event.from)) + .5) / visibleActors.length;
+    const b = compact.matches ? .82 : (visibleActors.indexOf(actorKey(event.to)) + .5) / visibleActors.length;
     const lost = /Timeout|未送达/.test(event.op) || event.kind === 'blocked';
-    const endAt = lost ? a + (b - a) * .68 : b;
+    const endAt = lost && event.to !== 'resilience' ? a + (b - a) * .68 : b;
     row.style.setProperty('--start', (a * 100) + '%');
     row.style.setProperty('--end', (endAt * 100) + '%');
     row.style.setProperty('--width', (Math.abs(endAt - a) * 100) + '%');
@@ -216,7 +217,9 @@ function renderTimeline() {
     operation.type = 'button';
     operation.append(element('span', 'ordinal', String(index + 1).padStart(2, '0')));
     const eventProvider = providerFor(event);
-    if (eventProvider && eventProvider !== headingProvider) operation.append(element('span', 'message-provider', eventProvider));
+    if (!compact.matches && eventProvider && eventProvider !== headingProvider && !event.op.includes(eventProvider)) {
+      operation.append(element('span', 'message-provider', eventProvider));
+    }
     operation.append(element('code', '', event.op));
     operation.setAttribute('aria-label', `第 ${index + 1} 步，${actorName(event.from)} 到 ${actorName(event.to)}，${event.op}`);
     operation.onclick = () => {
@@ -224,6 +227,12 @@ function renderTimeline() {
       timeline.querySelector('[data-active=true] .operation')?.focus({ preventScroll: true });
     };
     row.append(operation, element('div', 'message-line'), element('span', 'terminus', lost ? '×' : ''));
+    if (compact.matches) {
+      const endpoints = element('div', 'message-endpoints');
+      endpoints.append(element('span', '', actorName(event.from)), element('span', '', actorName(event.to)));
+      row.append(endpoints);
+    }
+    if (active) operation.setAttribute('aria-current', 'step');
     if (active && pending && !reduce.matches) {
       const dotCount = scenario.id === 'duplicates' && event.op.startsWith('重投') ? 3 : 1;
       for (let i = 0; i < dotCount; i++) {
@@ -235,7 +244,29 @@ function renderTimeline() {
     timeline.append(row);
   }
 }
+function renderChannels() {
+  $('channelPanel').hidden = !scenario.resilience;
+  if (!scenario.resilience) return;
+
+  for (const provider of ['stripe', 'paypal']) {
+    const breaker = state[provider + 'Breaker'];
+    const used = state[provider + 'Used'];
+    const limit = state[provider + 'Limit'];
+    const card = $(provider + 'Channel');
+    card.dataset.breaker = breaker;
+    card.querySelector('.breaker').textContent = breaker;
+    card.querySelector('.health').textContent = breaker === 'CLOSED' && used < limit ? 'Healthy' : 'Degraded';
+    card.querySelector('.utilization').textContent = `${used} / ${limit}`;
+    const meter = card.querySelector('meter');
+    meter.max = limit;
+    meter.value = used;
+  }
+  $('healthWindow').textContent = state.failureWindow;
+  $('healthCooldown').textContent = state.cooldown;
+  $('healthProbes').textContent = state.probes;
+}
 function renderState() {
+  renderChannels();
   let changes = 0;
   for (const [id, { card, nodes }] of fieldViews) {
     const changed = before[id] !== state[id];
@@ -295,7 +326,7 @@ function next() {
   return true;
 }
 function goTo(index) {
-  state = { ...base, ...scenario.initial };
+  state = { ...base, ...channelDefaults, ...scenario.initial };
   for (const event of scenario.steps.slice(0, Math.max(0, index - 1))) state = { ...state, ...event.patch };
   before = state;
   step = index;
@@ -366,9 +397,10 @@ function frame(timestamp) {
   requestFrame();
 }
 
-scenarios.forEach(({ name }, index) => {
+scenarios.forEach(({ name, resilience }, index) => {
   const button = element('button', '', name);
   button.type = 'button';
+  if (resilience) button.classList.add('resilience-choice');
   button.onclick = () => select(index);
   $('scenarios').append(button);
 });
@@ -395,6 +427,11 @@ $('play').onclick = togglePlay;
 $('previous').onclick = () => goTo(Math.max(0, step - 1));
 $('next').onclick = stepForward;
 $('reset').onclick = () => goTo(0);
+$('jumpToStep').onclick = () => {
+  const current = $('timeline').querySelector('.operation[aria-current=step]');
+  current?.scrollIntoView({ block: 'center' });
+  current?.focus({ preventScroll: true });
+};
 document.addEventListener('keydown', event => {
   if (event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest?.('input, select, textarea, pre, [contenteditable]')) return;

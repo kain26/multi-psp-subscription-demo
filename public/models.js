@@ -54,6 +54,22 @@ export function buildModel(id, color) {
         part(sphere, [x, y, -.03], [.13, .13, .13]);
       }
     },
+    resilience() {
+      const shield = new THREE.Shape();
+      shield.moveTo(0, .54);
+      shield.lineTo(.46, .35);
+      shield.lineTo(.41, -.18);
+      shield.quadraticCurveTo(.27, -.42, 0, -.56);
+      shield.quadraticCurveTo(-.27, -.42, -.41, -.18);
+      shield.lineTo(-.46, .35);
+      shield.closePath();
+      part(new THREE.ExtrudeGeometry(shield, {
+        depth: .13, bevelSize: .025, bevelThickness: .025, bevelSegments: 2,
+      }), [0, 0, -.075], [1, 1, 1]);
+      bar([.05, .29, .09], [-.14, -.01, .09], .035, dark);
+      bar([-.14, -.01, .09], [.075, -.01, .09], .035, dark);
+      bar([.075, -.01, .09], [-.055, -.31, .09], .035, dark);
+    },
     adapter() {
       ring(.31, .082, [-.27, .08, 0]).rotation.y = -.28;
       ring(.31, .082, [.27, -.06, .06], light).rotation.y = .45;

@@ -195,4 +195,110 @@ async function repairMissingCredits(invoice: VerifiedInvoicePayment) {
 }
 // 成功续费经过独立的收款验证，再发放下一周期 Credits。`,
   },
+  fallback: {
+    title: '只在发送边界前自动换渠道',
+    point: '本地准入拒绝可以考虑下一个兼容的 PSP。发送结果不确定时立即进入原渠道的恢复流程。',
+    source: `async function start(intent: CheckoutIntent) {
+  for (const psp of router.compatibleCandidates(intent)) {
+    const permit = limits[psp].tryAdmitNewRequest();
+    // 此处涵盖熔断、并发槽位和速率限制，还未调用 Adapter。
+    if (!permit) continue;
+    try {
+      const attempt = await attempts.reserveFirst(intent.id, psp);
+      if (!attempt.owned) return attempt.currentResponse;
+      return await submitAndRecord(attempt); // 传输结果未知 → UNKNOWN
+    } finally {
+      permit.releaseAfterTransportCleanup();
+    }
+  }
+  return checkoutTemporarilyUnavailable();
+}`,
+  },
+  bulkhead: {
+    title: '按 PSP 隔离信号量与连接池',
+    point: '等待时间和同时在途数分别约束。释放槽位发生在本地连接清理后。',
+    source: `const pools = {
+  Stripe: createPool({ concurrency: 4 }),
+  PayPal: createPool({ concurrency: 2 }),
+};
+
+async function submit(attempt: PaymentAttempt) {
+  const pool = pools[attempt.provider];
+  const lease = pool.tryAcquire(); // 立即拒绝或由外层有界排队
+  if (!lease) return { kind: "NOT_SENT" };
+
+  try {
+    return await pool.request(attempt, { timeoutMs: 2500 });
+  } catch (error) {
+    return classifyTransportResult(attempt, error);
+  } finally {
+    await lease.closeTransportAndRelease();
+  }
+}`,
+  },
+  breaker: {
+    title: '用渠道故障率驱动熔断状态',
+    point: '按 PSP 和操作隔离统计。使用带轮次的有限探测，避免旧结果污染新一轮。',
+    source: `const settings = {
+  windowMs: 60_000, minimum: 20, failureRate: 0.5,
+  cooldownMs: 30_000, probeBudget: 3,
+};
+
+function recordHealth(breaker: Breaker, sample: HealthSample) {
+  if (sample.localRejection || sample.epoch !== breaker.epoch) return;
+  const failed = isTimeoutOrNetworkErrorOrPsp5xx(sample);
+  // 普通业务拒绝属于有效响应，故障分子不加 1。
+  if (breaker.state === "HALF-OPEN") {
+    return breaker.recordProbe({ failed, requiredSuccesses: 3 });
+  }
+
+  if (breaker.state !== "CLOSED") return;
+  const recent = breaker.window.record(failed, settings.windowMs);
+  if (recent.total >= settings.minimum &&
+      recent.failures / recent.total >= settings.failureRate) {
+    breaker.openFor(settings.cooldownMs);
+  }
+}
+// 冷却结束原子切换 HALF-OPEN，最多 3 个安全探测许可。
+// 任一探测失败重新 OPEN，3 次全部成功才恢复 CLOSED。`,
+  },
+  'confirmed-failure': {
+    title: '终态证明和业务策略同时放行',
+    point: '在事务里封存旧尝试并只预留一个后继。卡拒或风控失败走专门流程。',
+    source: `async function reserveFallback(old: Attempt, proof: ProviderProof) {
+  return db.transaction(async tx => {
+    const current = await tx.attempts.lock(old.id);
+
+    if (current.status !== "FAILED") return stop();
+    if (!proof.provesNoEffectiveChargeOrSubscription(current)) return stop();
+    if (!policy.permitsChannelFallback(current.reason)) return stop();
+
+    const target = router.compatibleBackup(current);
+    if (!target) return stop();
+
+    // UNIQUE(previous_attempt_id)，并发重试取得同一个后继。
+    return tx.attempts.reserveSuccessor(current.id, target);
+  });
+}
+// 后继持有独立 PSP key，提交时仍需检查目标渠道容量。`,
+  },
+  'renewal-fallback': {
+    title: '续费先恢复原 PSP，再安排迁移',
+    point: '授权与支付凭证归属原渠道。进宽限期和迁移订阅是两个独立动作。',
+    source: `async function recoverRenewal(sub: Subscription, invoice: Invoice) {
+  const psp = adapters[sub.provider];
+  const evidence = await psp.checkInvoice(invoice.providerRef);
+  if (evidence?.collected) return applyPaid(evidence);
+
+  if (policy.shouldWait(sub, invoice)) {
+    return retryOriginalReconciliation(sub.id, invoice.id);
+  }
+
+  await billing.applyGraceAndNotify(sub, invoice);
+  if (policy.shouldOfferMigration(sub)) {
+    return migration.requestAuthorizationOrEligibleTransfer(sub);
+  }
+}
+// 迁移切换前核对未决账期，并协调停用旧续费与启用新续费。`,
+  },
 };

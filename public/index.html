@@ -24,16 +24,30 @@
 <button class="primary" id="play">播放演示</button><button id="previous">上一步</button><button id="next">下一步</button><button id="reset">重置</button>
 <span class="shortcuts"><kbd>←</kbd> <kbd>→</kbd> 步进　<kbd>空格</kbd> 播放</span>
 </div>
+<section id="channelPanel" class="channel-panel" aria-labelledby="channelHeading" hidden>
+<div class="sectionHead"><h3 id="channelHeading">支付渠道容错层 <small>Payment Resilience Layer</small></h3><p>模拟渠道状态</p></div>
+<div class="channels">
+<section class="channel" id="stripeChannel" aria-label="Stripe Adapter">
+<div><h4>Stripe Adapter</h4><span class="breaker"></span><span class="health"></span></div>
+<div class="capacity"><label for="stripeSlots">并发槽位 <b class="utilization"></b></label><meter id="stripeSlots" min="0"></meter></div>
+</section>
+<section class="channel" id="paypalChannel" aria-label="PayPal Adapter">
+<div><h4>PayPal Adapter</h4><span class="breaker"></span><span class="health"></span></div>
+<div class="capacity"><label for="paypalSlots">并发槽位 <b class="utilization"></b></label><meter id="paypalSlots" min="0"></meter></div>
+</section>
+</div>
+<div class="channel-stats"><span>Stripe 最近 60 秒故障 <b id="healthWindow"></b></span><span>冷却 <b id="healthCooldown"></b></span><span>安全探测 <b id="healthProbes"></b></span></div>
+</section>
 <section class="sequence" aria-labelledby="sequenceTitle">
-<div class="sectionHead"><h3 id="sequenceTitle">交互时序 <small>时间 ↓</small></h3>
+<div class="sectionHead"><h3 id="sequenceTitle">完整时序 <small>时间 ↓</small></h3><button class="jump-step" id="jumpToStep" type="button" disabled>定位当前步</button>
 <ul class="paths" aria-label="路径图例"><li><i></i>同步 Checkout</li><li><i></i>异步 Webhook 与权益</li><li><i></i>对账与补偿</li></ul></div>
+<div class="event" aria-live="polite"><strong id="result"></strong><p id="caption"></p></div>
 <div class="diagram">
 <div id="actorGroups" class="actor-groups" aria-hidden="true"></div>
 <figure class="scene" id="scene" aria-label="支付系统组件的 3D 图标"></figure>
 <div id="actors" class="actors" role="list" aria-label="时序参与者"></div>
 <div id="timeline" class="timeline" aria-label="按时间从上到下排列的调用"></div>
 </div>
-<div class="event" aria-live="polite"><strong id="result"></strong><p id="caption"></p></div>
 </section>
 <section class="machine" aria-labelledby="machineTitle">
 <div class="sectionHead"><h3 id="machineTitle">状态机</h3><p id="stateNote"></p></div>
@@ -53,6 +67,20 @@
 <pre id="codeScroll" tabindex="0" aria-label="当前场景的 TypeScript 伪代码"><code id="scenarioCode"></code></pre>
 </div>
 </section>
+<details class="interview resilience-guide">
+<summary>容错机制与切换条件</summary>
+<div class="talk resilience-guide-body">
+<dl>
+<div><dt>Timeout</dt><dd>限制本地等待时间。请求已发出且结果不确定时，将尝试标为 UNKNOWN 并查原 PSP。</dd></div>
+<div><dt>Circuit Breaker</dt><dd>渠道故障率过高时快速拒绝新请求。示例为 60 秒内至少 20 次且故障率达到 50%，冷却 30 秒后最多放行 3 个安全探测。</dd></div>
+<div><dt>Bulkhead 与限流</dt><dd>分别隔离 Stripe 和 PayPal 的并发槽位及连接池，再用限流控制单位时间内的请求量。</dd></div>
+<div><dt>Fallback</dt><dd>发送前可选兼容备用渠道。发送后先核对原尝试。只有确认无有效交易且业务策略允许，才建立新尝试。</dd></div>
+</dl>
+<p class="operations">多实例 Node.js 部署按 PSP、商户账户和操作聚合指标，共享或协调熔断状态及探测租约。连接池与并发槽位可在实例内隔离，需全局硬上限时再加分布式配额。追踪 PSP、Attempt 和账期，保持配置可版本化。</p>
+<p class="operations">已有订阅的 PSP 迁移单独规划授权、支付凭证、订阅映射和账期切换，核对旧渠道未决扣款后再启用新续费。</p>
+<p><a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker">Circuit Breaker</a><a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead">Bulkhead</a><a href="https://stripe.com/guides/five-steps-to-accelerate-your-data-migration-to-stripe">Stripe 数据迁移</a></p>
+</div>
+</details>
 <section class="principles">
 <article><h2>Adapter</h2><p>统一 Checkout、状态查询和事件语义。各渠道的能力、标识和幂等范围留在 Adapter 内。</p></article>
 <article><h2>Router</h2><p>按国家、币种、支付方式、能力和健康度做初始选择。已经发出的尝试保留渠道归属。</p></article>
