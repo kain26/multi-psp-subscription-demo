@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="并排演示 PayPal 与 Stripe 订阅的授权、扣款、续费和异常，从原始 Webhook 追踪到统一 Adapter 事件。">
+<title>PayPal × Stripe · 订阅生命周期</title>
+<link rel="icon" href="/subscription-lifecycle-icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/subscription-lifecycle.css">
+</head>
+<body>
+<main class="lifecycle">
+<nav class="route-nav" aria-label="页面导航"><a href="/">← 支付系统设计</a><span aria-current="page">订阅生命周期</span></nav>
+<header class="masthead">
+<h1>订阅生命周期</h1>
+<p class="intro">同一份月度订阅，左边走 PayPal，右边走 Stripe。跟着授权、扣款与 Webhook，看 Adapter 怎样把渠道事实交给统一业务层。</p>
+</header>
+<section class="lab" aria-labelledby="compareTitle">
+<div class="labHead"><h2 id="compareTitle">完整时序</h2><span class="lc-note">模拟事件 · 顺序按业务过程展示</span></div>
+<nav id="phases" class="phases" aria-label="生命周期步骤"></nav>
+<div class="lc-controls controls" role="group" aria-label="演示控制">
+<button class="primary" id="play" type="button">播放演示</button><button id="previous" type="button">上一步</button><button id="next" type="button">下一步</button><button id="reset" type="button">重置</button><span id="stepNumber"></span>
+</div>
+<div class="lc-event" aria-live="polite"><h3 id="stepTitle"></h3><p id="stepNote"></p></div>
+<div class="lanes" id="lanes">
+<section class="lane" aria-labelledby="paypalHeading">
+<header><h3 id="paypalHeading">PayPal Subscription</h3><p>Product → Plan → Subscription → Sale</p></header>
+<div class="lane-body"><p class="lane-label">API / 事件</p><code id="paypalSignal"></code><p id="paypalDetail"></p><dl><dt>渠道事实</dt><dd id="paypalState"></dd></dl></div>
+<div class="lane-adapter">↓ <strong>PayPal Adapter</strong></div>
+</section>
+<section class="lane" aria-labelledby="stripeHeading">
+<header><h3 id="stripeHeading">Stripe Subscription</h3><p>Product → Price → Subscription → Invoice</p></header>
+<div class="lane-body"><p class="lane-label">API / 事件</p><code id="stripeSignal"></code><p id="stripeDetail"></p><dl><dt>渠道事实</dt><dd id="stripeState"></dd></dl></div>
+<div class="lane-adapter">↓ <strong>Stripe Adapter</strong></div>
+</section>
+</div>
+<section class="normalized" aria-labelledby="adapterTitle">
+<div><h3 id="adapterTitle">统一业务层</h3><code id="domainEvent"></code></div>
+<p id="adapterDetail"></p>
+</section>
+<noscript><p>打开 JavaScript 可逐步播放。下方有完整流程和 API 对照。</p></noscript>
+</section>
+
+<details class="interview lc-overview" id="overview" hidden>
+<summary>展开完整 10 阶段时序</summary>
+<ol id="fullSequence" aria-label="PayPal 与 Stripe 完整时序"></ol>
+</details>
+
+<section class="lc-section" aria-labelledby="orderTitle">
+<h2 id="orderTitle">授权、扣款和 Webhook 的关系</h2>
+<div class="order-grid">
+<article><h3>PayPal · 买家授权后按计划计费</h3><ol>
+<li>复用 Product 和 Plan，创建订阅并引导买家批准 <code>approve</code> 链接。</li>
+<li>收到激活通知或查询到 <code>ACTIVE</code>，记录订阅状态。试用、延迟开始和设置费可改变首笔实扣时间。</li>
+<li>根据计划扣款，成功时收到 <code>PAYMENT.SALE.COMPLETED</code>。每笔 Sale 都要关联订阅并判断款项归属。</li>
+<li>后续按周期扣款。失败可重试、累积欠款、暂停，用 <code>auto_bill_outstanding</code> 配置自动补收，用 <code>payment_failure_threshold</code> 配置暂停阈值。符合条件时也能通过 <code>capture</code> 补收。</li>
+</ol></article>
+<article><h3>Stripe · 以 Invoice 驱动周期计费</h3><ol>
+<li>复用 Product 和 recurring Price。托管方式创建 Checkout Session，也可给已有 Customer 直接建立 Subscription。</li>
+<li>在常见的自动收款流程中，首次 Invoice 生成并 finalize，然后尝试收款。需要认证或异步确认时继续等最终状态。</li>
+<li><code>invoice.paid</code> 表示账单已结清。核对结清方式、账单行和订阅状态，再按业务规则发权益。</li>
+<li>续费生成新的 Invoice。失败按配置尝试恢复，支付和订阅状态分别更新。</li>
+</ol></article>
+</div>
+<p class="lc-callout"><strong>投递可以乱序或重复。</strong> 浏览器回跳只更新 UI。后端先验签并持久化 Inbox，按 PSP 事件 ID 去重，缺失或矛盾时查原渠道，再由 Worker 应用业务状态和权益。</p>
+</section>
+
+<section class="lc-section" aria-labelledby="mappingTitle">
+<h2 id="mappingTitle">Adapter 统一什么</h2>
+<div class="mapping">
+<article><h3>操作契约</h3><p>同一个 <code>createCheckout(intent)</code> 可返回审批 URL，或返回需要认证、等待确认的结果。改套餐能力可以声明「需重新同意」和实际生效日期。</p></article>
+<article><h3>状态与证据</h3><p>分别保存原始订阅状态、账单或交易证据与内部权益。PayPal <code>ACTIVE</code> 可同时有未解决的欠款，内部 <code>PAST_DUE</code> 由自己的策略推导。</p></article>
+<article><h3>两层幂等</h3><p>Inbox 按渠道账户和事件 ID 去重。结算证据保留 <code>invoice</code> 或 <code>sale</code> 的类型和 ID。权益按内部账期守住唯一性，避免补收或拆单引起重复发放。</p></article>
+</div>
+<section class="implementation" aria-labelledby="codeTitle">
+<div class="implementation-notes"><h2 id="codeTitle">同一份内部契约</h2><p>Stripe 的 Invoice ID 和 PayPal 的 Sale ID 作为带类型的证据引用保留。允许一个收款证据核销多个账期。</p></div>
+<div class="implementation-editor"><div class="editor-bar">TypeScript 伪代码</div>
+<pre tabindex="0" aria-label="Adapter 及权益处理伪代码"><code>type BillingEvidence = {
+  provider: "paypal" | "stripe"
+  accountId: string
+  subscriptionRef: string
+  evidence: { kind: "sale" | "invoice"; id: string }
+  outcome: "settled" | "failed" | "reversed"
+}
+
+const verified = await adapter.verifyWebhook(rawBody, headers)
+await inbox.storeOnce(verified) // UNIQUE (provider, account_id, event_id)
+
+// Worker 从持久化 Inbox 读取，按原 PSP 查询并验证
+const fact = await adapter.normalize(inboxEntry)
+const periods = await billing.resolveCoveredPeriods(fact)
+await db.transaction(async tx =&gt; {
+  await tx.recordBillingFact(fact)
+  if (fact.outcome === "settled") {
+    for (const period of periods) {
+      await tx.ledger.grantOnce(period, "monthly_credits")
+    }
+  }
+  if (fact.outcome === "reversed") {
+    await tx.ledger.adjustOnce(fact, periods)
+  }
+  await tx.inbox.markProcessed(inboxEntry)
+})
+// UNIQUE (subscription_id, billing_period_id, credit_type)</code></pre></div>
+</section>
+</section>
+
+<section class="lc-section" aria-labelledby="opsTitle">
+<h2 id="opsTitle">异常与补偿</h2>
+<details class="interview"><summary>买家退出、回跳成功，或创建请求超时</summary><div class="talk"><p>未完成批准时保留待确认意图，并按超时策略关闭本地入口。创建请求超时属于 <code>UNKNOWN</code>，使用原渠道幂等键重试或查询原尝试。确认没有有效扣款风险后才决定是否新建尝试。</p></div></details>
+<details class="interview"><summary>重复、丢失和乱序 Webhook</summary><div class="talk"><p>同事件入 Inbox 一次，同一账期发放一次。接到旧失败通知时，查询原账单、交易和订阅，避免覆盖已确认的成功。定期拉 Stripe Invoice 和 PayPal 订阅交易列表，补齐缺失记录。订阅状态变化也需要单独追踪。PayPal 官方说明，未获 HTTP 2xx 时，Webhook 最多在 3 天内重投 25 次。该窗口与订阅扣款重试无关。</p></div></details>
+<details class="interview"><summary>恢复、取消、退款和权益归属</summary><div class="talk"><p>本地宽限期与 PSP 重试窗口独立。取消按已付服务期决定何时停权益。退款或撤销关联原付款证据，按影响的账期和数量调整账本。部分退款由业务规则决定如何处理。</p></div></details>
+</section>
+
+<section class="lc-section" aria-labelledby="apiTitle"><h2 id="apiTitle">API 对照</h2>
+<div class="api-pairs" role="list">
+<article role="listitem"><h3>创建</h3><code>PayPal · POST /v1/billing/subscriptions</code><code>Stripe · POST /v1/checkout/sessions 或 /v1/subscriptions</code></article>
+<article role="listitem"><h3>升降级</h3><code>PayPal · POST /v1/billing/subscriptions/{id}/revise</code><code>Stripe · POST /v1/subscriptions/{id}</code></article>
+<article role="listitem"><h3>暂停与取消</h3><code>PayPal · POST .../{id}/suspend、/activate、/cancel</code><code>Stripe · POST /v1/subscriptions/{id} 设置期末取消，或 DELETE /v1/subscriptions/{id} 立即取消</code></article>
+<article role="listitem"><h3>对账与补收</h3><code>PayPal · GET .../{id}/transactions，POST .../{id}/capture</code><code>Stripe · GET /v1/invoices?subscription={id}，POST /v1/invoices/{id}/pay</code></article>
+</div></section>
+<footer><p>面试设计示意。使用模拟事件和标识。</p><div>
+<a href="https://developer.paypal.com/api/subscriptions/v1">PayPal Subscriptions API</a><a href="https://developer.paypal.com/subscriptions/webhooks">PayPal Webhook 事件</a><a href="https://developer.paypal.com/api/rest/webhooks/rest/">PayPal 验签与投递</a><a href="https://developer.paypal.com/subscriptions/payment-failure-retry">PayPal 重试与欠款</a><a href="https://developer.paypal.com/subscriptions/tiers">PayPal 升降级</a>
+<a href="https://docs.stripe.com/api/subscriptions">Stripe Subscriptions API</a><a href="https://docs.stripe.com/billing/subscriptions/webhooks">Stripe Webhook</a><a href="https://docs.stripe.com/billing/revenue-recovery/smart-retries">Stripe Smart Retries</a><a href="https://docs.stripe.com/billing/subscriptions/prorations">Stripe 比例计费</a>
+</div></footer>
+</main>
+<script type="module" src="/subscription-lifecycle.js"></script>
+</body>
+</html>

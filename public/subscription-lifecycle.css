@@ -1,0 +1,72 @@
+.lifecycle {max-width:1160px}
+.lifecycle .route-nav {display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin-bottom:8px;color:var(--muted);font-size:13px}
+.lifecycle a {color:var(--ink);text-underline-offset:3px}
+.lifecycle .route-nav a {display:inline-flex;align-items:center;min-height:44px}
+.lifecycle .masthead {grid-template-columns:minmax(0,1fr) minmax(240px,410px)}
+.lifecycle .lc-note {color:var(--muted);font-size:13px}
+.lifecycle .phases {display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px}
+.lifecycle .phases button {min-height:44px;white-space:nowrap}
+.lifecycle .phases button[aria-pressed=true] {background:var(--ink-wash);border-color:var(--ink);color:var(--ink)}
+.lifecycle .lc-controls {padding:8px 0;border-block:1px solid var(--line)}
+.lifecycle .lc-controls button {min-height:44px}
+.lifecycle #stepNumber {margin-left:auto;color:var(--ink);font:700 14px var(--mono)}
+.lifecycle .lc-event {display:grid;align-items:baseline;grid-template-columns:minmax(160px,.8fr) minmax(0,1.8fr);gap:6px 18px;padding:14px 0}
+.lifecycle .lc-event h3 {border-left:2px solid var(--ink);padding-left:10px;font-size:18px}
+.lifecycle .lc-event p {color:var(--muted)}
+.lifecycle .lanes,.lifecycle .order-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lifecycle .lane {display:grid;grid-template-rows:auto 1fr auto;border:1px solid var(--line);border-radius:10px;background:var(--panel);min-width:0}
+.lifecycle .lane header {padding:10px 12px;background:var(--surface);border-bottom:1px solid var(--line);border-radius:9px 9px 0 0}
+.lifecycle .lane h3 {font-size:18px}
+.lifecycle .lane header p {margin-top:3px;color:var(--muted);font:13px/1.5 var(--mono)}
+.lifecycle .lane-body {padding:12px;min-width:0;overflow-wrap:anywhere}
+.lifecycle .lane-body .lane-label {font-size:13px;color:var(--muted);margin-bottom:4px}
+.lifecycle .lane-body code {display:block;color:var(--ink);font-size:14px;font-weight:650;overflow-wrap:anywhere}
+.lifecycle .lane-body > p:not(.lane-label) {margin-top:8px}
+.lifecycle .lane dl {margin:12px 0 0;padding-top:8px;border-top:1px solid var(--line)}
+.lifecycle .lane dt {font-size:13px;color:var(--muted)}
+.lifecycle .lane dd {margin:4px 0 0;font-weight:650;overflow-wrap:anywhere}
+.lifecycle .lane-adapter {position:relative;padding:7px 12px;border-top:1px solid var(--line);background:var(--ink-wash);color:var(--ink);border-radius:0 0 9px 9px;font:14px/1.5 var(--mono)}
+.lifecycle .lane-adapter::after {content:"";position:absolute;inset:auto auto -12px 50%;height:12px;border-left:1px dashed var(--ink)}
+.lifecycle .normalized {display:grid;grid-template-columns:minmax(180px,.8fr) minmax(0,1.8fr);gap:6px 16px;align-items:center;margin-top:12px;padding:10px 12px;border:1px solid var(--ink-rule);border-radius:9px;background:var(--ink-wash);overflow-wrap:anywhere}
+.lifecycle .normalized code {color:var(--ink);font-size:14px;font-weight:700}
+.lifecycle .lane-adapter::before {content:"";position:absolute;z-index:1;left:calc(50% - 3px);bottom:0;width:6px;height:6px;border-radius:50%;background:var(--ink);opacity:0}
+.lifecycle .is-updating .lane-adapter::before {animation:lc-signal 420ms ease-out}
+@keyframes lc-signal {from{transform:translateY(-10px);opacity:0} 30%{opacity:1} to{transform:translateY(14px);opacity:0}}
+.lifecycle .is-updating .lane-body,.lifecycle .is-updating .normalized {animation:lc-step 240ms ease-out}
+@keyframes lc-step {from{transform:translateY(3px);opacity:.72}}
+.lifecycle .lc-section {margin-top:24px}
+.lifecycle .lc-section h2 {margin-bottom:10px;font-size:23px}
+.lifecycle .order-grid article {padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+.lifecycle .order-grid ol {padding-left:22px;margin:8px 0 0}
+.lifecycle li+li {margin-top:6px}
+.lifecycle .lc-callout {margin-top:10px;padding:9px 12px;border-left:2px solid var(--ink);background:var(--ink-wash)}
+.lifecycle .mapping {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.lifecycle .mapping article {border-top:1px solid var(--line);padding-top:8px}
+.lifecycle .mapping h3,.lifecycle .api-pairs h3 {margin-bottom:5px;font-size:16px}
+.lifecycle .api-pairs article {display:grid;grid-template-columns:minmax(90px,.5fr) repeat(2,minmax(0,2fr));gap:8px;padding:9px 0;border-top:1px solid var(--line)}
+.lifecycle .api-pairs code,.lifecycle .mapping code,.lifecycle .order-grid code {overflow-wrap:anywhere}
+.lifecycle footer {padding-top:10px;border-top:1px solid var(--line)}
+@media(max-width:680px) {
+  .lifecycle .masthead,.lifecycle .mapping,.lifecycle .order-grid,.lifecycle .lc-event,
+  .lifecycle .normalized,.lifecycle .api-pairs article {grid-template-columns:minmax(0,1fr)}
+  .lifecycle .phases {flex-wrap:nowrap;overflow:auto;padding:4px 3px 10px}
+  .lifecycle .phases button {flex:none}
+  .lifecycle .lanes {gap:6px}
+  .lifecycle .lane header,.lifecycle .lane-body,.lifecycle .lane-adapter {padding-inline:7px}
+  .lifecycle .lane h3 {font-size:15px}
+  .lifecycle .lane header p,.lifecycle .lane-body code,.lifecycle .lane-adapter {font-size:12px;overflow-wrap:anywhere}
+  .lifecycle .lane-body {font-size:14px}
+}
+@media(prefers-reduced-motion:reduce) {
+  .lifecycle .is-updating .lane-body,.lifecycle .is-updating .normalized,.lifecycle .is-updating .lane-adapter::before {animation:none}
+}
+
+.lifecycle .lc-overview {margin-top:16px}
+.lifecycle #fullSequence {margin:0;padding:0 0 12px 25px}
+.lifecycle #fullSequence li {padding:8px 0;border-top:1px solid var(--line)}
+.lifecycle #fullSequence li + li {margin-top:0}
+.lifecycle #fullSequence li > div {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lifecycle #fullSequence h3 {font-size:16px;margin-bottom:4px}
+.lifecycle #fullSequence strong,.lifecycle #fullSequence code {display:block;overflow-wrap:anywhere}
+.lifecycle #fullSequence code,.lifecycle .lc-overview-event {font-size:13px}
+.lifecycle .lc-overview-event {color:var(--ink);margin-top:5px;overflow-wrap:anywhere}
