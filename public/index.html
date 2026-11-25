@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="用 3D 动画演示多 PSP 订阅系统设计，覆盖正常支付、Webhook 幂等、超时恢复、Outbox 与对账。">
 <title>Multi-PSP · 订阅支付系统设计</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="/subscription-lifecycle-icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -100,6 +100,7 @@
 <footer>
 <p>面试设计示意。使用模拟事件和标识。</p>
 <div><a href="https://docs.stripe.com/checkout/fulfillment">Stripe Checkout</a><a href="https://docs.stripe.com/webhooks">Stripe Webhook</a><a href="https://developer.paypal.com/api/rest/reference/idempotency/">PayPal 幂等</a><a href="https://docs.stripe.com/api/idempotent_requests">Stripe 幂等</a><a href="https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html">Transactional Outbox</a></div>
+<nav class="footer-route" aria-label="相关演示"><a href="/subscription-lifecycle">订阅流程 · PayPal 与 Stripe 对照 <span aria-hidden="true">→</span></a></nav>
 </footer>
 </main>
 <script type="module" src="./app.js"></script>
