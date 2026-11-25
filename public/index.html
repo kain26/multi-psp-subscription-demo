@@ -10,19 +10,26 @@
 </head>
 <body>
 <main>
-<header>
+<header class="masthead">
 <h1>多渠道订阅支付</h1>
 <p class="intro">以 OpenArt Pro 首购为例，看 Stripe、PayPal 与订阅权益如何解耦，异常如何恢复。</p>
 </header>
-<div class="scenarios" id="scenarios" role="group" aria-label="演示场景"></div>
+<nav class="scenarios" id="scenarios" aria-label="演示场景"></nav>
 <section class="lab" aria-labelledby="scenarioTitle">
 <div class="labHead">
-<div><h2 id="scenarioTitle"></h2><p id="scenarioSummary"></p></div>
-<span id="progress"></span>
+<h2 id="scenarioTitle"></h2>
 </div>
-<div class="controls" aria-label="演示控制">
+<div class="walkthrough">
+<div class="controls" role="group" aria-label="演示控制">
 <button class="primary" id="play">播放演示</button><button id="previous">上一步</button><button id="next">下一步</button><button id="reset">重置</button>
-<span class="shortcuts"><kbd>←</kbd> <kbd>→</kbd> 步进　<kbd>空格</kbd> 播放</span>
+<div class="trace-links">
+<button class="jump-step" id="jumpToStep" type="button" disabled>当前步</button>
+<a class="trace-link" href="#machineTitle">状态机 ↓</a>
+</div>
+<div class="run-progress"><span id="progress"></span><progress id="stepMeter" aria-label="演示进度"></progress></div>
+<span class="shortcuts"><kbd>←</kbd> <kbd>→</kbd> 步进　<kbd>空格</kbd> 播放 / 暂停</span>
+</div>
+<div class="event" aria-live="polite"><strong id="result"></strong><p id="caption"></p></div>
 </div>
 <section id="channelPanel" class="channel-panel" aria-labelledby="channelHeading" hidden>
 <div class="sectionHead"><h3 id="channelHeading">支付渠道容错层 <small>Payment Resilience Layer</small></h3><p>模拟渠道状态</p></div>
@@ -39,9 +46,8 @@
 <div class="channel-stats"><span>Stripe 最近 60 秒故障 <b id="healthWindow"></b></span><span>冷却 <b id="healthCooldown"></b></span><span>安全探测 <b id="healthProbes"></b></span></div>
 </section>
 <section class="sequence" aria-labelledby="sequenceTitle">
-<div class="sectionHead"><h3 id="sequenceTitle">完整时序 <small>时间 ↓</small></h3><button class="jump-step" id="jumpToStep" type="button" disabled>定位当前步</button>
-<ul class="paths" aria-label="路径图例"><li><i></i>同步 Checkout</li><li><i></i>异步 Webhook 与权益</li><li><i></i>对账与补偿</li></ul></div>
-<div class="event" aria-live="polite"><strong id="result"></strong><p id="caption"></p></div>
+<div class="sectionHead"><h3 id="sequenceTitle">完整时序 <small>时间 ↓</small></h3>
+<ul class="paths" aria-label="路径图例"><li><i></i>同步 Checkout</li><li><i></i>异步 Webhook 与权益</li><li><i></i>对账与补偿</li><li><b aria-hidden="true">×</b> 未送达</li><li><b aria-hidden="true">⊣</b> 到达后拦截</li><li><b aria-hidden="true">?</b> 送达未知</li></ul></div>
 <div class="diagram">
 <div id="actorGroups" class="actor-groups" aria-hidden="true"></div>
 <figure class="scene" id="scene" aria-label="支付系统组件的 3D 图标"></figure>
@@ -50,7 +56,7 @@
 </div>
 </section>
 <section class="machine" aria-labelledby="machineTitle">
-<div class="sectionHead"><h3 id="machineTitle">状态机</h3><p id="stateNote"></p></div>
+<div class="sectionHead"><h3 id="machineTitle" tabindex="-1">状态机</h3><p id="stateNote"></p></div>
 <div class="status" id="status" aria-label="业务状态迁移"></div>
 <div class="metrics" id="metrics" aria-label="持久化计数"></div>
 </section>

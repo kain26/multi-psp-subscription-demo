@@ -287,7 +287,14 @@ function recordHealth(breaker: Breaker, sample: HealthSample) {
     point: '授权与支付凭证归属原渠道。进宽限期和迁移订阅是两个独立动作。',
     source: `async function recoverRenewal(sub: Subscription, invoice: Invoice) {
   const psp = adapters[sub.provider];
-  const evidence = await psp.checkInvoice(invoice.providerRef);
+  let evidence;
+  try {
+    evidence = await psp.checkInvoice(invoice.providerRef);
+  } catch (error) {
+    if (!isTransientPspLookupError(error)) throw error;
+    // 查询失败时仍保留未决账期，继续评估原渠道重试或宽限期。
+    await billing.recordLookupDeferred(invoice.id);
+  }
   if (evidence?.collected) return applyPaid(evidence);
 
   if (policy.shouldWait(sub, invoice)) {

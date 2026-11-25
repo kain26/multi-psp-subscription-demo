@@ -167,7 +167,7 @@ function resizeScene() {
 function renderActors() {
   const event = currentEvent() ?? scenario.steps[0];
   const endpoints = [actorKey(event.from), actorKey(event.to)];
-  visibleActors = actors.map(([id]) => id).filter(id => !compact.matches || endpoints.includes(id));
+  visibleActors = compact.matches ? [...new Set(endpoints)] : actors.map(([id]) => id);
   const diagram = stage.parentElement;
   diagram.style.setProperty('--columns', visibleActors.length);
   const groups = compact.matches ? [['本步参与者', visibleActors.length]] :
@@ -206,16 +206,19 @@ function renderTimeline() {
     row.dataset.active = String(active);
     row.dataset.preview = String(index >= step);
     row.dataset.channel = eventChannel(event);
-    const a = compact.matches ? .18 : (visibleActors.indexOf(actorKey(event.from)) + .5) / visibleActors.length;
-    const b = compact.matches ? .82 : (visibleActors.indexOf(actorKey(event.to)) + .5) / visibleActors.length;
-    const lost = /Timeout|未送达/.test(event.op) || event.kind === 'blocked';
-    const endAt = lost && event.to !== 'resilience' ? a + (b - a) * .68 : b;
+    const a = compact.matches ? .25 : (visibleActors.indexOf(actorKey(event.from)) + .5) / visibleActors.length;
+    const b = compact.matches ? .75 : (visibleActors.indexOf(actorKey(event.to)) + .5) / visibleActors.length;
+    const interrupted = event.delivery === 'interrupted' || event.delivery === 'not-sent';
+    const intercepted = event.delivery === 'delivered' && event.kind === 'blocked';
+    const mark = interrupted ? '×' : intercepted ? '⊣' : event.delivery === 'unconfirmed' ? '?' : '';
+    const endAt = interrupted ? a + (b - a) * .68 : b;
     row.style.setProperty('--start', (a * 100) + '%');
     row.style.setProperty('--end', (endAt * 100) + '%');
     row.style.setProperty('--width', (Math.abs(endAt - a) * 100) + '%');
     row.style.setProperty('--left', (Math.min(a, endAt) * 100) + '%');
     row.dataset.direction = b >= a ? 'right' : 'left';
-    row.dataset.lost = String(lost);
+    row.dataset.lost = String(interrupted || event.delivery === 'unconfirmed');
+    row.dataset.marked = String(Boolean(mark));
     const operation = element('button', 'operation');
     operation.type = 'button';
     operation.append(element('span', 'ordinal', String(index + 1).padStart(2, '0')));
@@ -229,7 +232,7 @@ function renderTimeline() {
       goTo(index + 1);
       timeline.querySelector('[data-active=true] .operation')?.focus({ preventScroll: true });
     };
-    row.append(operation, element('div', 'message-line'), element('span', 'terminus', lost ? '×' : ''));
+    row.append(operation, element('div', 'message-line'), element('span', 'terminus', mark));
     if (compact.matches) {
       const endpoints = element('div', 'message-endpoints');
       endpoints.append(element('span', '', actorName(event.from)), element('span', '', actorName(event.to)));
@@ -292,11 +295,17 @@ function renderControls() {
   $('previous').disabled = !step;
   $('next').disabled = step === scenario.steps.length;
   $('progress').textContent = `${step} / ${scenario.steps.length}`;
+  $('stepMeter').max = scenario.steps.length;
+  $('stepMeter').value = step;
+}
+function renderOutcome() {
+  const event = currentEvent();
+  $('result').textContent = pending ? '正在传递请求或事件…' : event?.result ?? scenario.summary;
+  $('caption').textContent = pending ? event.op :
+    event?.note ?? '点击任意步骤查看，或用「下一步」从第一条交互开始。';
 }
 function render() {
-  const event = currentEvent();
-  $('result').textContent = event?.result ?? scenario.summary;
-  $('caption').textContent = event?.note ?? '点击任意步骤查看，或用「下一步」从第一条交互开始。';
+  renderOutcome();
   renderActors();
   renderTimeline();
   renderState();
@@ -305,6 +314,7 @@ function render() {
 function commit() {
   if (!pending) return;
   pending = false;
+  if (step === scenario.steps.length) playing = false;
   const provider = state.provider;
   state = { ...state, ...currentEvent().patch };
   if (state.provider !== provider) {
@@ -312,6 +322,7 @@ function commit() {
     renderTimeline();
   }
   renderState();
+  renderOutcome();
   renderControls();
   for (const { dot } of activeDots) dot.remove();
   activeDots = [];
@@ -325,6 +336,7 @@ function next() {
   elapsed = 0;
   if (reduce.matches) commit();
   render();
+  followActiveStep();
   requestFrame();
   return true;
 }
@@ -372,7 +384,9 @@ if (clipboard?.writeText) {
 }
 function select(index) {
   scenario = scenarios[index];
-  Array.from($('scenarios').children).forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
+  for (const button of $('scenarios').querySelectorAll('[data-scenario]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.scenario === scenario.id));
+  }
   $('scenarioTitle').textContent = scenario.title;
   renderCode();
   goTo(0);
@@ -400,12 +414,41 @@ function frame(timestamp) {
   requestFrame();
 }
 
-scenarios.forEach(({ name }, index) => {
-  const button = element('button', '', name);
-  button.type = 'button';
-  button.onclick = () => select(index);
-  $('scenarios').append(button);
-});
+const scenarioGroups = [
+  ['购买与幂等', ['normal', 'paypal', 'double']],
+  ['异步与账单', ['duplicates', 'reconcile', 'outbox', 'entitlement', 'renewal']],
+  ['渠道容错', ['timeout', 'fallback', 'bulkhead', 'breaker', 'confirmed-failure', 'renewal-fallback']],
+];
+for (const [label, ids] of scenarioGroups) {
+  const group = element('div', 'scenario-group');
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', label);
+  group.append(element('span', 'scenario-label', label));
+  const options = element('div', 'scenario-options');
+  for (const id of ids) {
+    const index = scenarios.findIndex(item => item.id === id);
+    const button = element('button', '', scenarios[index].name);
+    button.type = 'button';
+    button.dataset.scenario = id;
+    button.onclick = () => select(index);
+    options.append(button);
+  }
+  group.append(options);
+  $('scenarios').append(group);
+}
+
+function activeOperation() {
+  return $('timeline').querySelector('.operation[aria-current=step]');
+}
+function followActiveStep() {
+  const operation = activeOperation();
+  if (!operation) return;
+  const bounds = operation.closest('.sequence-row').getBoundingClientRect();
+  // Preserve the architecture view until the active row moves offscreen.
+  const top = document.querySelector('.walkthrough').getBoundingClientRect().bottom;
+  if (bounds.bottom > innerHeight) window.scrollBy(0, bounds.bottom - innerHeight + 12);
+  else if (bounds.top < top) window.scrollBy(0, bounds.top - top - 12);
+}
 function togglePlay() {
   if (playing) {
     playing = false;
@@ -430,17 +473,29 @@ $('previous').onclick = () => goTo(Math.max(0, step - 1));
 $('next').onclick = stepForward;
 $('reset').onclick = () => goTo(0);
 $('jumpToStep').onclick = () => {
-  const current = $('timeline').querySelector('.operation[aria-current=step]');
+  const current = activeOperation();
   current?.scrollIntoView({ block: 'center' });
   current?.focus({ preventScroll: true });
 };
+let clickedControl = null;
+document.addEventListener('pointerdown', event => {
+  clickedControl = event.target.closest?.('.controls button');
+});
 document.addEventListener('keydown', event => {
   if (event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest?.('input, select, textarea, pre, [contenteditable]')) return;
+  if (event.key === 'Tab') clickedControl = null;
+  const timelineFocused = event.target.closest?.('.operation');
   if (event.key === 'ArrowRight' && step < scenario.steps.length) stepForward();
-  else if (event.key === 'ArrowLeft' && step) goTo(step - 1);
-  else if (event.key === ' ' && !event.target.closest?.('button, a, summary')) togglePlay();
+  else if (event.key === 'ArrowLeft' && step) {
+    goTo(step - 1);
+    followActiveStep();
+  }
+  else if (event.key === ' ' && (event.target === clickedControl || !event.target.closest?.('button, a, summary'))) {
+    if (!event.repeat) togglePlay();
+  }
   else return;
+  if (timelineFocused) (activeOperation() ?? $('next')).focus({ preventScroll: true });
   event.preventDefault();
 });
 const requested = new URLSearchParams(location.search).get('demo');

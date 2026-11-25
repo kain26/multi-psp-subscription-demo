@@ -1,6 +1,6 @@
 import { resilienceScenarios } from './resilience.js';
 
-const action = (from,to,op,result,note,patch={},kind='flow')=>({from,to,op,result,note,patch,kind});
+const action = (from,to,op,result,note,patch={},kind='flow',delivery='delivered')=>({from,to,op,result,note,patch,kind,delivery});
 export const base={checkout:'—',payment:'—',invoice:'—',subscription:'—',entitlement:'—',provider:null,intents:0,sessions:0,credits:0,inbox:0,pending:0};
 const create=action('client','api','POST /subscriptions/checkout','收到购买请求','服务端从可信套餐目录查价格，校验用户、国家、币种和支付方式。此时还未向外部渠道发请求。');
 const intent=action('api','store','INSERT SubscriptionIntent','持久化订阅意图与幂等键','本例以用户和 checkout 操作为作用域。相同 key 必须匹配相同请求，改变参数需要新操作。',{intents:1,checkout:'CREATING',subscription:'PENDING'});
@@ -43,8 +43,8 @@ export const scenarios=[
   ]},
   {id:'timeout',name:'PSP 超时',title:'响应丢了，结果仍然未知',resilience:true,summary:'先固定旧渠道并恢复原请求。UNKNOWN 不代表失败。',initial:{intents:1,checkout:'CREATING',payment:'PENDING',subscription:'PENDING'},steps:[
     route,useStripe,stripe,
-    action('stripe','adapter','响应丢失 → Timeout','本地标记 UNKNOWN','图中我们知道 Stripe 已创建，但调用方只看到超时。Session 阶段与实际扣款阶段都可能有不确定结果。',{checkout:'UNKNOWN',payment:'UNKNOWN'},'warn'),
-    action('resilience','paypal','尝试切换 PSP','拦截 · 旧请求仍可能成功','在 UNKNOWN 时禁止另一渠道再创建同一购买或扣款。跨 PSP 的幂等键不会互相去重。即使 Stripe 热点故障促使熔断 OPEN，本笔仍是 UNKNOWN。',{stripeBreaker:'OPEN'},'blocked'),
+    action('stripe','adapter','响应丢失 → Timeout','本地标记 UNKNOWN','图中我们知道 Stripe 已创建，但调用方只看到超时。Session 阶段与实际扣款阶段都可能有不确定结果。',{checkout:'UNKNOWN',payment:'UNKNOWN'},'warn','interrupted'),
+    action('resilience','paypal','尝试切换 PSP','拦截 · 旧请求仍可能成功','在 UNKNOWN 时禁止另一渠道再创建同一购买或扣款。跨 PSP 的幂等键不会互相去重。即使 Stripe 热点故障促使熔断 OPEN，本笔仍是 UNKNOWN。',{stripeBreaker:'OPEN'},'blocked','not-sent'),
     action('adapter','stripe','原 key 重试／查询已知标识','找回 cs_demo_01','在渠道幂等有效期内重试原操作。已知 Session ID 时直接查询，否则用可验证的关联或对账。超过期且仍未知时进入待处理队列。',{},'ok'),
     action('adapter','store','绑定旧 Session','恢复 OPEN · 仍只存在一个 Session','确认旧 Session 仍可用就复用。允许切换前，须按阶段确认旧操作不会继续扣款，或按业务完成关闭和过账处理。',{checkout:'OPEN',payment:'PENDING'},'ok'),
   ]},
@@ -58,7 +58,7 @@ export const scenarios=[
     action('billing','store','UNIQUE(subscription_id, invoice_id, credit_type)','同发票同权益只发放一次','按业务维度写入账本。即便两个事件都到达 Worker，最终只有 1 笔 Credits 发放。',{},'ok'),
   ]},
   {id:'reconcile',name:'丢失与乱序',title:'Webhook 驱动增量，对账修复遗漏',summary:'用渠道快照与状态迁移校验纠正本地视图。',initial:{provider:'Stripe',checkout:'COMPLETED',payment:'UNCONFIRMED',invoice:'OPEN',subscription:'PENDING',intents:1,sessions:1},steps:[
-    action('stripe','webhook','invoice.paid 未送达','本地仍显示 OPEN','本例渠道已收款，本地未收到该通知。不要用本地超时直接推断支付失败。',{},'blocked'),
+    action('stripe','webhook','invoice.paid 未送达','本地仍显示 OPEN','本例渠道已收款，本地未收到该通知。不要用本地超时直接推断支付失败。',{},'blocked','interrupted'),
     action('reconcile','store','扫描超时未终态订单','定位 in_01 · 待核验','按账户与游标处理，避免全量重复；可以限定查找窗口并补扫跨边界事件。'),
     action('reconcile','stripe','retrieve invoice / payment','可信来源确认 in_01 已支付','定期对账将渠道账单和本地交易、应发权益做关联。核对金额、币种、订单映射和收款证明。'),
     action('reconcile','billing','重放统一已收款事件','进入相同状态机','对账修复走与 Webhook 相同的域处理入口和业务唯一键。'),
@@ -69,7 +69,7 @@ export const scenarios=[
   ]},
   {id:'outbox',name:'Outbox 恢复',title:'数据库已提交，消息却没发出去',summary:'状态和事件同事务落库，Relay 重投，消费者幂等。',initial:{...paidSeed,subscription:'PENDING',payment:'UNCONFIRMED',invoice:'OPEN',entitlement:'—',pending:0},steps:[
     statePaid,
-    action('store','queue','Relay 发送失败／进程崩溃','Outbox 仍待发布','数据库已提交，但 Broker 没确认。这条事件留在表里，业务状态不会因发送失败而丢掉后续任务。',{},'blocked'),
+    action('store','queue','Relay 发送失败／进程崩溃','Outbox 仍待发布','数据库已提交，但 Broker 没确认。这条事件留在表里，业务状态不会因发送失败而丢掉后续任务。',{},'blocked','unconfirmed'),
     action('store','queue','Relay 恢复后重试','Broker 收到 · 发送标记尚未写回','即使 Broker 已成功接收，Relay 也可能在写回 sent 标记前崩溃。'),
     grant,
     action('store','queue','Relay 再次发布相同业务事件','可能重复投递','恢复后不能从 sent 标记区分上一轮是否已投递，允许安全重投。',{pending:0},'warn'),
