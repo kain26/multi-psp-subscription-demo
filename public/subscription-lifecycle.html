@@ -17,7 +17,7 @@
 <p class="intro">同一份月度订阅，左边走 PayPal，右边走 Stripe。跟着授权、扣款与 Webhook，看 Adapter 怎样把渠道事实交给统一业务层。</p>
 </header>
 <section class="lab" aria-labelledby="compareTitle">
-<div class="labHead"><h2 id="compareTitle">完整时序</h2><span class="lc-note">模拟事件 · 顺序按业务过程展示</span></div>
+<div class="labHead"><h2 id="compareTitle">完整时序</h2><span class="lc-note">模拟事件 · 顺序按业务过程展示　<a href="#renewal">第二次扣款专题 ↓</a></span></div>
 <nav id="phases" class="phases" aria-label="生命周期步骤"></nav>
 <div class="lc-controls controls" role="group" aria-label="演示控制">
 <button class="primary" id="play" type="button">播放演示</button><button id="previous" type="button">上一步</button><button id="next" type="button">下一步</button><button id="reset" type="button">重置</button><span id="stepNumber"></span>
@@ -46,6 +46,40 @@
 <summary>展开完整 10 阶段时序</summary>
 <ol id="fullSequence" aria-label="PayPal 与 Stripe 完整时序"></ol>
 </details>
+
+<section class="lc-section" id="renewal" aria-labelledby="renewalTitle">
+<h2 id="renewalTitle">第二次扣款 · 从账期到权益</h2>
+<p class="lc-callout"><strong>首购已授权，下月由原 PSP 到期收款。</strong> 以无试用、无设置费的月付套餐为例。首扣属于第 1 期，下月续费属于第 2 期。余额不足后再次尝试，仍是在收第 2 期的账款。应用的定时任务负责对账和通知。</p>
+<div class="order-grid">
+<article><h3>PayPal · 原 Subscription 按 Plan 续费</h3><ol>
+<li><strong>首购</strong>　保存商户账户、<code>subscription_id</code> 和 <code>plan_id</code>。买家在 PayPal 批准自动付款，由 PayPal 管理该订阅的付款来源。</li>
+<li><strong>到期</strong>　PayPal 按 <code>billing_cycles</code> 尝试收款。后端可用 <code>GET /v1/billing/subscriptions/{id}</code> 读取 <code>billing_info.next_billing_time</code> 作为显示和对账参考。</li>
+<li><strong>结算</strong>　成功收到 <code>PAYMENT.SALE.COMPLETED</code>。核实 Sale、订阅与款项所覆盖的账期。补收可能覆盖历史欠款，按分配结果更新权益。</li>
+</ol></article>
+<article><h3>Stripe · 为新周期生成新 Invoice</h3><ol>
+<li><strong>首购</strong>　通过 Checkout 保存订阅的付款方式。自建流程也可在取得用户未来扣款授权后用 <code>SetupIntent</code> 准备 off-session 付款方式。保存渠道引用。</li>
+<li><strong>到期</strong>　Stripe 按账期生成新 Invoice，典型续费为 <code>billing_reason=subscription_cycle</code>。账单 finalize 后，<code>charge_automatically</code> 用适用的默认付款方式发起 off-session 扣款。</li>
+<li><strong>结算</strong>　收到 <code>invoice.paid</code> 后，核实结清方式、账单行和服务期。重试沿用本期 Invoice。遇到异步处理中状态时，等待最终结果或查原账单。</li>
+</ol></article>
+</div>
+<p class="lc-callout"><strong>Adapter 的交接点</strong>　验签 → 持久化 Inbox → 用原 PSP 查询补足证据 → 把 Sale 或 Invoice 归一成结算事实 → 事务内更新账期与权益。用 <code>(subscription_id, billing_period_id, credit_type)</code> 防止重复发放。账单事件可能乱序，后到的旧失败不能抹掉已确认结算。</p>
+
+<h3>Billing 模式怎么区分</h3>
+<div class="mapping">
+<article><h3>怎么收费</h3><p>固定价、按席位或按用量决定应收金额。Stripe 固定价用 recurring Price，按席位用订阅项的 quantity。按用量计费先记录和汇总使用量，再生成账单。PayPal 本页的例子使用 Plan 的 <code>billing_cycles</code>、定价和试用设置。</p></article>
+<article><h3>怎么收钱</h3><p>Stripe <code>collection_method=charge_automatically</code> 自动尝试扣款。<code>send_invoice</code> 发账单并设置付款期限，由客户付款。PayPal 本例使用买家批准的自动付款。</p></article>
+<article><h3>怎么计算或调整账单</h3><p>Stripe 的 <code>billing_mode=classic</code> 或 <code>flexible</code> 影响账单行为，例如改价时如何计算比例抵扣。PayPal 的 <code>payment_preferences</code> 控制重试失败后的欠款补收和暂停阈值。</p></article>
+</div>
+
+<h3>续费失败怎么处理</h3>
+<details class="interview"><summary>卡没钱 · 余额不足</summary><div class="talk"><p><strong>Stripe</strong>　<code>invoice.payment_failed</code> 后查可用的付款错误信息，例如 <code>insufficient_funds</code>。提醒用户补足余额或换卡。可重试时交给 Smart Retries 或自定义计划处理同一张 Invoice。<strong>PayPal</strong>　收到 <code>BILLING.SUBSCRIPTION.PAYMENT.FAILED</code> 后查询订阅与可用的失败详情。按原计划重试，核对失败计数和欠款。渠道未提供具体原因时，内部记录普通支付失败。</p></div></details>
+<details class="interview"><summary>卡不安全 · 风控拦截、挂失或硬拒绝</summary><div class="talk"><p><strong>处理</strong>　Stripe 可能报告 <code>fraudulent</code>、<code>stolen_card</code> 或其他拒绝。内部记录有限的诊断信息，对客户给通用拒绝提示，引导换卡或联系发卡行。PayPal 钱包路线由 PayPal 管理风控。只使用它返回的失败信息。停止应用发起的盲重试，保留原订阅归属。</p></div></details>
+<details class="interview"><summary>卡过期或没有默认卡 · 更新付款方式</summary><div class="talk"><p><strong>Stripe</strong>　用 <code>POST /v1/billing_portal/sessions</code> 引导客户更新付款信息，或用 SetupIntent 收集新卡。查明是哪一层默认卡失败，若订阅设置了 <code>default_payment_method</code>，需核对并按授权更新该字段。只改 Customer 默认卡可能仍会重试旧卡。<strong>PayPal</strong>　引导买家在其自动付款设置中修改可用付款方式，再查原订阅结果。</p></div></details>
+<details class="interview"><summary>需要 3DS · 用户必须回来完成认证</summary><div class="talk"><p><strong>Stripe</strong>　处理 <code>invoice.payment_action_required</code> 或已确认的 <code>requires_action</code>，通过原账单的 <code>hosted_invoice_url</code> 引导客户完成适用的认证。保存好付款方式仍可能需要补认证。<strong>PayPal</strong>　按渠道提供的客户动作或原订阅批准流程引导用户。两边都等最终结算再更新新一期权益。</p></div></details>
+<details class="interview"><summary>账单未定稿、扣款超时或仍在处理中</summary><div class="talk"><p><strong>未定稿</strong>　收到 <code>invoice.finalization_failed</code> 时用 <code>GET /v1/invoices/{id}</code> 查 <code>last_finalization_error</code>，补齐资料后等自动定稿，或在草稿符合条件时调用 <code>POST /v1/invoices/{id}/finalize</code>。<strong>结果未知</strong>　保存原尝试和幂等键，查询原渠道 Invoice 或订阅交易，等待或对账。PayPal 交易用 <code>GET /v1/billing/subscriptions/{id}/transactions</code>。确认原尝试结果后才能决定是否发起新操作。</p></div></details>
+<details class="interview"><summary>客服手动补收 · 如何避免撞上自动重试</summary><div class="talk"><p>同一账期只允许一个业务补收任务在途。操作前查询原 PSP 的账款和未决付款。应用内锁只能限制自己的补收任务，自动重试仍由 PSP 调度。若不确定是否会撞上自动重试，等待原渠道结果或让用户在原账单页完成付款。Stripe 可在允许时对现有未结清账单调用 <code>POST /v1/invoices/{id}/pay</code>。PayPal 可在支持条件下对已确认欠款调用 <code>POST /v1/billing/subscriptions/{id}/capture</code>，使用 <code>OUTSTANDING_BALANCE</code>。符合接口条件时使用幂等键，完成后仍按终态与账期发放。重试耗尽后按产品宽限期处理权益。</p></div></details>
+<p class="lc-note">官方资料　<a href="https://docs.stripe.com/billing/collection-method">Stripe 收款方式</a> · <a href="https://docs.stripe.com/billing/subscriptions/billing-mode/compare">Classic 与 Flexible</a> · <a href="https://docs.stripe.com/payments/setup-intents">SetupIntent</a> · <a href="https://docs.stripe.com/declines/codes">卡拒绝码</a> · <a href="https://docs.stripe.com/api/customer_portal/sessions/create">客户门户 API</a> · <a href="https://docs.stripe.com/api/invoices/pay">Invoice Pay API</a> · <a href="https://developer.paypal.com/api/subscriptions/v1/subscriptions-get/">PayPal 订阅查询</a> · <a href="https://www.paypal.com/gm/cshelp/article/what-is-an-automatic-payment-and-how-do-i-update-or-cancel-one-help240">PayPal 自动付款设置</a></p>
+</section>
 
 <section class="lc-section" aria-labelledby="orderTitle">
 <h2 id="orderTitle">授权、扣款和 Webhook 的关系</h2>

@@ -70,3 +70,8 @@
 .lifecycle #fullSequence strong,.lifecycle #fullSequence code {display:block;overflow-wrap:anywhere}
 .lifecycle #fullSequence code,.lifecycle .lc-overview-event {font-size:13px}
 .lifecycle .lc-overview-event {color:var(--ink);margin-top:5px;overflow-wrap:anywhere}
+
+.lifecycle #renewal {scroll-margin-top:16px}
+.lifecycle #renewal .order-grid,.lifecycle #renewal .mapping {margin:10px 0}
+.lifecycle #renewal > h3 {margin-top:16px}
+.lifecycle #renewal .talk,.lifecycle #renewal .lc-callout {overflow-wrap:anywhere}
