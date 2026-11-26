@@ -42,7 +42,7 @@
 <noscript><p>打开 JavaScript 可逐步播放。下方有完整流程和 API 对照。</p></noscript>
 </section>
 
-<details class="interview lc-overview" id="overview" hidden>
+<details class="demo-details lc-overview" id="overview" hidden>
 <summary>展开完整 10 阶段时序</summary>
 <ol id="fullSequence" aria-label="PayPal 与 Stripe 完整时序"></ol>
 </details>
@@ -72,12 +72,12 @@
 </div>
 
 <h3>续费失败怎么处理</h3>
-<details class="interview"><summary>卡没钱 · 余额不足</summary><div class="talk"><p><strong>Stripe</strong>　<code>invoice.payment_failed</code> 后查可用的付款错误信息，例如 <code>insufficient_funds</code>。提醒用户补足余额或换卡。可重试时交给 Smart Retries 或自定义计划处理同一张 Invoice。<strong>PayPal</strong>　收到 <code>BILLING.SUBSCRIPTION.PAYMENT.FAILED</code> 后查询订阅与可用的失败详情。按原计划重试，核对失败计数和欠款。渠道未提供具体原因时，内部记录普通支付失败。</p></div></details>
-<details class="interview"><summary>卡不安全 · 风控拦截、挂失或硬拒绝</summary><div class="talk"><p><strong>处理</strong>　Stripe 可能报告 <code>fraudulent</code>、<code>stolen_card</code> 或其他拒绝。内部记录有限的诊断信息，对客户给通用拒绝提示，引导换卡或联系发卡行。PayPal 钱包路线由 PayPal 管理风控。只使用它返回的失败信息。停止应用发起的盲重试，保留原订阅归属。</p></div></details>
-<details class="interview"><summary>卡过期或没有默认卡 · 更新付款方式</summary><div class="talk"><p><strong>Stripe</strong>　用 <code>POST /v1/billing_portal/sessions</code> 引导客户更新付款信息，或用 SetupIntent 收集新卡。查明是哪一层默认卡失败，若订阅设置了 <code>default_payment_method</code>，需核对并按授权更新该字段。只改 Customer 默认卡可能仍会重试旧卡。<strong>PayPal</strong>　引导买家在其自动付款设置中修改可用付款方式，再查原订阅结果。</p></div></details>
-<details class="interview"><summary>需要 3DS · 用户必须回来完成认证</summary><div class="talk"><p><strong>Stripe</strong>　处理 <code>invoice.payment_action_required</code> 或已确认的 <code>requires_action</code>，通过原账单的 <code>hosted_invoice_url</code> 引导客户完成适用的认证。保存好付款方式仍可能需要补认证。<strong>PayPal</strong>　按渠道提供的客户动作或原订阅批准流程引导用户。两边都等最终结算再更新新一期权益。</p></div></details>
-<details class="interview"><summary>账单未定稿、扣款超时或仍在处理中</summary><div class="talk"><p><strong>未定稿</strong>　收到 <code>invoice.finalization_failed</code> 时用 <code>GET /v1/invoices/{id}</code> 查 <code>last_finalization_error</code>，补齐资料后等自动定稿，或在草稿符合条件时调用 <code>POST /v1/invoices/{id}/finalize</code>。<strong>结果未知</strong>　保存原尝试和幂等键，查询原渠道 Invoice 或订阅交易，等待或对账。PayPal 交易用 <code>GET /v1/billing/subscriptions/{id}/transactions</code>。确认原尝试结果后才能决定是否发起新操作。</p></div></details>
-<details class="interview"><summary>客服手动补收 · 如何避免撞上自动重试</summary><div class="talk"><p>同一账期只允许一个业务补收任务在途。操作前查询原 PSP 的账款和未决付款。应用内锁只能限制自己的补收任务，自动重试仍由 PSP 调度。若不确定是否会撞上自动重试，等待原渠道结果或让用户在原账单页完成付款。Stripe 可在允许时对现有未结清账单调用 <code>POST /v1/invoices/{id}/pay</code>。PayPal 可在支持条件下对已确认欠款调用 <code>POST /v1/billing/subscriptions/{id}/capture</code>，使用 <code>OUTSTANDING_BALANCE</code>。符合接口条件时使用幂等键，完成后仍按终态与账期发放。重试耗尽后按产品宽限期处理权益。</p></div></details>
+<details class="demo-details"><summary>卡没钱 · 余额不足</summary><div class="talk"><p><strong>Stripe</strong>　<code>invoice.payment_failed</code> 后查可用的付款错误信息，例如 <code>insufficient_funds</code>。提醒用户补足余额或换卡。可重试时交给 Smart Retries 或自定义计划处理同一张 Invoice。<strong>PayPal</strong>　收到 <code>BILLING.SUBSCRIPTION.PAYMENT.FAILED</code> 后查询订阅与可用的失败详情。按原计划重试，核对失败计数和欠款。渠道未提供具体原因时，内部记录普通支付失败。</p></div></details>
+<details class="demo-details"><summary>卡不安全 · 风控拦截、挂失或硬拒绝</summary><div class="talk"><p><strong>处理</strong>　Stripe 可能报告 <code>fraudulent</code>、<code>stolen_card</code> 或其他拒绝。内部记录有限的诊断信息，对客户给通用拒绝提示，引导换卡或联系发卡行。PayPal 钱包路线由 PayPal 管理风控。只使用它返回的失败信息。停止应用发起的盲重试，保留原订阅归属。</p></div></details>
+<details class="demo-details"><summary>卡过期或没有默认卡 · 更新付款方式</summary><div class="talk"><p><strong>Stripe</strong>　用 <code>POST /v1/billing_portal/sessions</code> 引导客户更新付款信息，或用 SetupIntent 收集新卡。查明是哪一层默认卡失败，若订阅设置了 <code>default_payment_method</code>，需核对并按授权更新该字段。只改 Customer 默认卡可能仍会重试旧卡。<strong>PayPal</strong>　引导买家在其自动付款设置中修改可用付款方式，再查原订阅结果。</p></div></details>
+<details class="demo-details"><summary>需要 3DS · 用户必须回来完成认证</summary><div class="talk"><p><strong>Stripe</strong>　处理 <code>invoice.payment_action_required</code> 或已确认的 <code>requires_action</code>，通过原账单的 <code>hosted_invoice_url</code> 引导客户完成适用的认证。保存好付款方式仍可能需要补认证。<strong>PayPal</strong>　按渠道提供的客户动作或原订阅批准流程引导用户。两边都等最终结算再更新新一期权益。</p></div></details>
+<details class="demo-details"><summary>账单未定稿、扣款超时或仍在处理中</summary><div class="talk"><p><strong>未定稿</strong>　收到 <code>invoice.finalization_failed</code> 时用 <code>GET /v1/invoices/{id}</code> 查 <code>last_finalization_error</code>，补齐资料后等自动定稿，或在草稿符合条件时调用 <code>POST /v1/invoices/{id}/finalize</code>。<strong>结果未知</strong>　保存原尝试和幂等键，查询原渠道 Invoice 或订阅交易，等待或对账。PayPal 交易用 <code>GET /v1/billing/subscriptions/{id}/transactions</code>。确认原尝试结果后才能决定是否发起新操作。</p></div></details>
+<details class="demo-details"><summary>客服手动补收 · 如何避免撞上自动重试</summary><div class="talk"><p>同一账期只允许一个业务补收任务在途。操作前查询原 PSP 的账款和未决付款。应用内锁只能限制自己的补收任务，自动重试仍由 PSP 调度。若不确定是否会撞上自动重试，等待原渠道结果或让用户在原账单页完成付款。Stripe 可在允许时对现有未结清账单调用 <code>POST /v1/invoices/{id}/pay</code>。PayPal 可在支持条件下对已确认欠款调用 <code>POST /v1/billing/subscriptions/{id}/capture</code>，使用 <code>OUTSTANDING_BALANCE</code>。符合接口条件时使用幂等键，完成后仍按终态与账期发放。重试耗尽后按产品宽限期处理权益。</p></div></details>
 <p class="lc-note">官方资料　<a href="https://docs.stripe.com/billing/collection-method">Stripe 收款方式</a> · <a href="https://docs.stripe.com/billing/subscriptions/billing-mode/compare">Classic 与 Flexible</a> · <a href="https://docs.stripe.com/payments/setup-intents">SetupIntent</a> · <a href="https://docs.stripe.com/declines/codes">卡拒绝码</a> · <a href="https://docs.stripe.com/api/customer_portal/sessions/create">客户门户 API</a> · <a href="https://docs.stripe.com/api/invoices/pay">Invoice Pay API</a> · <a href="https://developer.paypal.com/api/subscriptions/v1/subscriptions-get/">PayPal 订阅查询</a> · <a href="https://www.paypal.com/gm/cshelp/article/what-is-an-automatic-payment-and-how-do-i-update-or-cancel-one-help240">PayPal 自动付款设置</a></p>
 </section>
 
@@ -142,9 +142,9 @@ await db.transaction(async tx =&gt; {
 
 <section class="lc-section" aria-labelledby="opsTitle">
 <h2 id="opsTitle">异常与补偿</h2>
-<details class="interview"><summary>买家退出、回跳成功，或创建请求超时</summary><div class="talk"><p>未完成批准时保留待确认意图，并按超时策略关闭本地入口。创建请求超时属于 <code>UNKNOWN</code>，使用原渠道幂等键重试或查询原尝试。确认没有有效扣款风险后才决定是否新建尝试。</p></div></details>
-<details class="interview"><summary>重复、丢失和乱序 Webhook</summary><div class="talk"><p>同事件入 Inbox 一次，同一账期发放一次。接到旧失败通知时，查询原账单、交易和订阅，避免覆盖已确认的成功。定期拉 Stripe Invoice 和 PayPal 订阅交易列表，补齐缺失记录。订阅状态变化也需要单独追踪。PayPal 官方说明，未获 HTTP 2xx 时，Webhook 最多在 3 天内重投 25 次。该窗口与订阅扣款重试无关。</p></div></details>
-<details class="interview"><summary>恢复、取消、退款和权益归属</summary><div class="talk"><p>本地宽限期与 PSP 重试窗口独立。取消按已付服务期决定何时停权益。退款或撤销关联原付款证据，按影响的账期和数量调整账本。部分退款由业务规则决定如何处理。</p></div></details>
+<details class="demo-details"><summary>买家退出、回跳成功，或创建请求超时</summary><div class="talk"><p>未完成批准时保留待确认意图，并按超时策略关闭本地入口。创建请求超时属于 <code>UNKNOWN</code>，使用原渠道幂等键重试或查询原尝试。确认没有有效扣款风险后才决定是否新建尝试。</p></div></details>
+<details class="demo-details"><summary>重复、丢失和乱序 Webhook</summary><div class="talk"><p>同事件入 Inbox 一次，同一账期发放一次。接到旧失败通知时，查询原账单、交易和订阅，避免覆盖已确认的成功。定期拉 Stripe Invoice 和 PayPal 订阅交易列表，补齐缺失记录。订阅状态变化也需要单独追踪。PayPal 官方说明，未获 HTTP 2xx 时，Webhook 最多在 3 天内重投 25 次。该窗口与订阅扣款重试无关。</p></div></details>
+<details class="demo-details"><summary>恢复、取消、退款和权益归属</summary><div class="talk"><p>本地宽限期与 PSP 重试窗口独立。取消按已付服务期决定何时停权益。退款或撤销关联原付款证据，按影响的账期和数量调整账本。部分退款由业务规则决定如何处理。</p></div></details>
 </section>
 
 <section class="lc-section" aria-labelledby="apiTitle"><h2 id="apiTitle">API 对照</h2>
@@ -154,7 +154,7 @@ await db.transaction(async tx =&gt; {
 <article role="listitem"><h3>暂停与取消</h3><code>PayPal · POST .../{id}/suspend、/activate、/cancel</code><code>Stripe · POST /v1/subscriptions/{id} 设置期末取消，或 DELETE /v1/subscriptions/{id} 立即取消</code></article>
 <article role="listitem"><h3>对账与补收</h3><code>PayPal · GET .../{id}/transactions，POST .../{id}/capture</code><code>Stripe · GET /v1/invoices?subscription={id}，POST /v1/invoices/{id}/pay</code></article>
 </div></section>
-<footer><p>面试设计示意。使用模拟事件和标识。</p><div>
+<footer><p>演示使用模拟事件和标识。</p><div>
 <a href="https://developer.paypal.com/api/subscriptions/v1">PayPal Subscriptions API</a><a href="https://developer.paypal.com/subscriptions/webhooks">PayPal Webhook 事件</a><a href="https://developer.paypal.com/api/rest/webhooks/rest/">PayPal 验签与投递</a><a href="https://developer.paypal.com/subscriptions/payment-failure-retry">PayPal 重试与欠款</a><a href="https://developer.paypal.com/subscriptions/tiers">PayPal 升降级</a>
 <a href="https://docs.stripe.com/api/subscriptions">Stripe Subscriptions API</a><a href="https://docs.stripe.com/billing/subscriptions/webhooks">Stripe Webhook</a><a href="https://docs.stripe.com/billing/revenue-recovery/smart-retries">Stripe Smart Retries</a><a href="https://docs.stripe.com/billing/subscriptions/prorations">Stripe 比例计费</a>
 </div></footer>

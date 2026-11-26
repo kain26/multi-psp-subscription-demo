@@ -141,7 +141,7 @@ kbd,code {font-family:var(--mono)}
 .principles {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}
 .principles h2 {margin:0 0 4px;font:750 13px var(--mono);color:var(--ink);overflow-wrap:anywhere}
 .principles p {font-size:14px}
-.interview {margin:8px 0;border:1px solid var(--line);border-radius:8px;padding:0 11px}
+.demo-details {margin:8px 0;border:1px solid var(--line);border-radius:8px;padding:0 11px}
 summary {min-height:44px;padding:10px 0;cursor:pointer;font-size:14px;font-weight:700}
 .talk {padding:0 0 11px;font-size:14px}
 .talk p+p {margin-top:8px}

@@ -73,7 +73,7 @@
 <pre id="codeScroll" tabindex="0" aria-label="当前场景的 TypeScript 伪代码"><code id="scenarioCode"></code></pre>
 </div>
 </section>
-<details class="interview resilience-guide">
+<details class="demo-details resilience-guide">
 <summary>容错机制与切换条件</summary>
 <div class="talk resilience-guide-body">
 <dl>
@@ -93,14 +93,14 @@
 <article><h2>State Machine</h2><p>一次扣款、周期账单、长期订阅和产品权益各自迁移。续费失败可以进入宽限期。</p></article>
 <article><h2>Idempotency + Reconciliation</h2><p>用持久化唯一约束阻止重复效果，定期查渠道状态和权益账本补齐遗漏。</p></article>
 </section>
-<details class="interview">
-<summary>代码面试切入点 · Adapter 与 Webhook 幂等</summary>
+<details class="demo-details">
+<summary>实现要点 · Adapter 与 Webhook 幂等</summary>
 <div class="talk"><p>定义 <code>PaymentProvider.createCheckout(command, key)</code>、<code>retrieve(ref)</code> 和事件转换接口。用两个假的 Adapter 验证同一用例能够切换渠道，并测试超时映射为 <code>UNKNOWN</code>。</p><p>给 Webhook Inbox 加渠道事件唯一键，给权益账本加业务唯一键。测试同事件重复、不同事件指向同一发票、提交后重投，以及同一业务 key 更改参数时应拒绝。</p></div>
 </details>
 <footer>
-<p>面试设计示意。使用模拟事件和标识。</p>
+<p>演示使用模拟事件和标识。</p>
 <div><a href="https://docs.stripe.com/checkout/fulfillment">Stripe Checkout</a><a href="https://docs.stripe.com/webhooks">Stripe Webhook</a><a href="https://developer.paypal.com/api/rest/reference/idempotency/">PayPal 幂等</a><a href="https://docs.stripe.com/api/idempotent_requests">Stripe 幂等</a><a href="https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html">Transactional Outbox</a></div>
-<nav class="footer-route" aria-label="相关演示"><a href="/subscription-lifecycle">订阅流程 · PayPal 与 Stripe 对照 <span aria-hidden="true">→</span></a></nav>
+<nav class="footer-route" aria-label="相关演示"><a href="./subscription-lifecycle.html">订阅流程 · PayPal 与 Stripe 对照 <span aria-hidden="true">→</span></a></nav>
 </footer>
 </main>
 <script type="module" src="./app.js"></script>
